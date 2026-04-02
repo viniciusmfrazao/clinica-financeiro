@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Clínica Financeiro</title>
+  <link rel="stylesheet" href="css/style.css"/>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- TOAST -->
+<div id="toast-container"></div>
+
+<!-- LOGIN -->
+<div id="login-screen" style="display:none">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-circle">
+        <svg width="28" height="28" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <div class="login-title sistema-nome">Clínica Financeiro</div>
+      <div class="login-sub">Sistema de gestão financeira</div>
+    </div>
+    <form id="form-login">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>E-mail</label>
+          <input type="email" id="l-email" required autocomplete="email" autofocus/>
+        </div>
+        <div class="form-group">
+          <label>Senha</label>
+          <input type="password" id="l-senha" required autocomplete="current-password"/>
+        </div>
+      </div>
+      <p id="l-erro" style="color:var(--danger);font-size:13px;margin-bottom:12px;display:none"></p>
+      <button type="submit" class="btn btn-primary btn-full" id="btn-login">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none">
+
+  <!-- SIDEBAR OVERLAY (mobile) -->
+  <div id="sidebar-overlay" style="display:none" onclick="toggleSidebar()"></div>
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="logo-area">
+      <img class="logo-img" style="display:none" alt="Logo"/>
+      <div class="logo-placeholder" id="logo-placeholder">C</div>
+      <div>
+        <div class="logo-text sistema-nome">Clínica Financeiro</div>
+        <div class="logo-sub">Gestão financeira</div>
+      </div>
+    </div>
+
+    <nav id="sidebar-nav">
+      <!-- Preenchida via JS conforme perfil -->
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div>
+          <div class="user-name" id="user-name">—</div>
+          <div class="user-role" id="user-role">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="logout()">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:5px"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sair do sistema
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div id="main">
+    <!-- TOPBAR -->
+    <header id="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button id="mobile-menu-btn" onclick="toggleSidebar()" style="background:none;border:none;cursor:pointer;padding:6px;display:none">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <span id="topbar-title" class="page-title">Dashboard</span>
+      </div>
+      <div class="topbar-right">
+        <!-- Sino de notificações -->
+        <div style="position:relative">
+          <button onclick="toggleNotifPanel()" style="background:none;border:none;cursor:pointer;padding:6px;position:relative;color:var(--gray4)">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span id="notif-badge" style="position:absolute;top:2px;right:2px;width:16px;height:16px;background:var(--danger);color:#fff;border-radius:50%;font-size:10px;font-weight:700;display:none;align-items:center;justify-content:center"></span>
+          </button>
+          <div id="notif-panel" style="display:none;position:absolute;right:0;top:calc(100% + 8px);width:340px;background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow-md);border:0.5px solid var(--gray2);z-index:300;max-height:400px;overflow-y:auto">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--gray2);display:flex;justify-content:space-between;align-items:center">
+              <span style="font-weight:600;font-size:14px">Notificações</span>
+              <button onclick="marcarTodasLidas()" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--primary)">Marcar todas como lidas</button>
+            </div>
+            <div id="notif-lista"></div>
+          </div>
+        </div>
+        <span style="font-size:12px;color:var(--gray3)" id="topbar-data"></span>
+      </div>
+    </header>
+
+    <!-- CONTENT -->
+    <main id="content">
+      <div style="text-align:center;padding:60px"><span class="spinner dark"></span></div>
+    </main>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/pages.js"></script>
+<script>
+// ---- INICIALIZAÇÃO ----
+(async function init() {
+  // Data no topbar
+  document.getElementById('topbar-data').textContent =
+    new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'long',year:'numeric'});
+
+  // Carregar config mesmo sem login (cor/logo)
+  await carregarConfig();
+
+  // Verificar sessão
+  const user = await checkAuth();
+
+  if (!user) {
+    document.getElementById('login-screen').style.display = 'flex';
+    // Form login
+    document.getElementById('form-login').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-login');
+      const erro = document.getElementById('l-erro');
+      btn.innerHTML = spinnerHTML; btn.disabled = true; erro.style.display = 'none';
+      const { data, error } = await sb.auth.signInWithPassword({
+        email: document.getElementById('l-email').value,
+        password: document.getElementById('l-senha').value,
+      });
+      if (error) {
+        erro.textContent = 'E-mail ou senha incorretos'; erro.style.display = 'block';
+        btn.innerHTML = 'Entrar'; btn.disabled = false; return;
+      }
+      const { data: usr } = await sb.from('usuarios').select('*').eq('id', data.user.id).single();
+      if (!usr) {
+        erro.textContent = 'Usuário não cadastrado no sistema. Contate a gestora.'; erro.style.display = 'block';
+        btn.innerHTML = 'Entrar'; btn.disabled = false;
+        await sb.auth.signOut(); return;
+      }
+      APP.user = {...data.user,...usr};
+      document.getElementById('login-screen').style.display = 'none';
+      iniciarApp();
+    });
+    return;
+  }
+  iniciarApp();
+})();
+
+async function iniciarApp() {
+  const user = APP.user;
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('login-screen').style.display = 'none';
+
+  // Info do usuário
+  document.getElementById('user-avatar').textContent = initials(user.nome);
+  document.getElementById('user-name').textContent = user.nome;
+  document.getElementById('user-role').textContent = {gestora:'Gestora',secretaria:'Secretaria',contador:'Contador'}[user.perfil]||user.perfil;
+  document.getElementById('logo-placeholder').textContent = (APP.config.nome||'C')[0].toUpperCase();
+
+  // Carregar dados base
+  await carregarDadosBase();
+
+  // Montar navegação conforme perfil
+  const isGestora    = user.perfil === 'gestora';
+  const isSecretaria = user.perfil === 'secretaria';
+  const isContador   = user.perfil === 'contador';
+
+  const navItems = [
+    { page:'dashboard',      label:'Dashboard',         icon:Icons.dashboard, show: isGestora },
+    { page:'nova_entrada',   label:'Nova Entrada',      icon:Icons.entrada,   show: isGestora || isSecretaria },
+    { page:'saida_dia',      label:'Saída do Dia',      icon:Icons.saida,     show: isGestora || isSecretaria },
+    { page:'saida_completa', label:'Saída Completa',    icon:Icons.saida,     show: isGestora },
+    { section: 'Relatórios' },
+    { page:'entradas',       label:'Entradas',          icon:Icons.lista,     show: isGestora || isSecretaria || isContador },
+    { page:'saidas_secretaria',label:'Minhas Saídas',      icon:Icons.saida,     show: isSecretaria },
+    { page:'fluxo',          label:'Fluxo de Caixa',    icon:Icons.chart,     show: isGestora },
+    { page:'relatorios',      label:'Por Profissional',   icon:Icons.users,     show: isGestora },
+    { page:'metas',           label:'Metas',              icon:Icons.chart,     show: isGestora },
+    { page:'dre',            label:'DRE',               icon:Icons.dre,       show: isGestora || isContador },
+    { page:'recebiveis',     label:'Recebíveis',        icon:Icons.receiv,    show: isGestora },
+    { section: 'Sistema' },
+    { page:'admin',          label:'Administração',     icon:Icons.users,     show: isGestora },
+    { page:'configuracoes',  label:'Configurações',     icon:Icons.settings,  show: isGestora },
+  ];
+
+  const nav = document.getElementById('sidebar-nav');
+  nav.innerHTML = navItems.filter(i => i.show !== false).map(i => {
+    if (i.section) return `<div class="nav-section">${i.section}</div>`;
+    return `<a data-page="${i.page}" onclick="navigate('${i.page}')">${i.icon} ${i.label}</a>`;
+  }).join('');
+
+  // Navegar para página inicial
+  const startPage = isGestora ? 'dashboard' : isSecretaria ? 'nova_entrada' : 'entradas';
+  navigate(startPage);
+  // Carregar notificações periodicamente
+  if (isGestora) {
+    carregarNotificacoes();
+    setInterval(carregarNotificacoes, 60000); // a cada 1 minuto
+    // Disparar verificação de notificações automáticas
+    fetch(`${SUPABASE_URL}/functions/v1/notificacoes`, { method: 'POST', headers: { 'apikey': SUPABASE_ANON } }).catch(() => {});
+  }
+  // Fechar painel de notificações clicando fora
+  document.addEventListener('click', e => {
+    const panel = document.getElementById('notif-panel');
+    if (panel && !panel.contains(e.target) && !e.target.closest('button[onclick="toggleNotifPanel()"]')) {
+      panel.style.display = 'none';
+    }
+  });
+}
+
+function toggleSidebar() {
+  const s = document.getElementById('sidebar');
+  const o = document.getElementById('sidebar-overlay');
+  const open = s.classList.toggle('open');
+  o.style.display = open ? 'block' : 'none';
+}
+</script>
+
+<script>
+// Carregar páginas corrigidas do servidor (Edge Function)
+(async function() {
+  try {
+    const r = await fetch('https://avdqqbaeormqcvikpawn.supabase.co/functions/v1/paginas');
+    const js = await r.text();
+    eval(js);
+  } catch(e) { console.warn('Edge Function paginas indisponível:', e); }
+})();
+</script>
+</body>
+</html>
