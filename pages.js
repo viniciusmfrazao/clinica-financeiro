@@ -17,6 +17,8 @@ function navigate(page) {
     saida_dia: pgSaidaDia, saida_completa: pgSaidaCompleta,
     entradas: pgEntradas, fluxo: pgFluxo,
     dre: pgDRE, recebiveis: pgRecebiveis,
+    metas: pgMetas, relatorios: pgRelatorios,
+    saidas_secretaria: pgSaidasSecretaria,
     admin: pgAdmin, configuracoes: pgConfiguracoes,
   };
   (pages[page] || pgDashboard)();
