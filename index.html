@@ -201,6 +201,15 @@ async function iniciarApp() {
     return `<a data-page="${i.page}" onclick="navigate('${i.page}')">${i.icon} ${i.label}</a>`;
   }).join('');
 
+  // Carregar páginas corrigidas ANTES de navegar
+  try {
+    const _r = await fetch('https://avdqqbaeormqcvikpawn.supabase.co/functions/v1/paginas', {
+      headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2ZHFxYmFlb3JtcWN2aWtwYXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNzM1OTEsImV4cCI6MjA5MDY0OTU5MX0.EQHJI-ByJ8CRq1y_-GKDykj4vZe3UsngxYV25m3Mm3Y' }
+    });
+    const _js = await _r.text();
+    eval(_js);
+  } catch(_e) { console.warn('[paginas] usando versão local'); }
+
   // Navegar para página inicial
   const startPage = isGestora ? 'dashboard' : isSecretaria ? 'nova_entrada' : 'entradas';
   navigate(startPage);
