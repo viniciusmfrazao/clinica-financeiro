@@ -1056,42 +1056,25 @@ window.toggleNotifPanel = function() {
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 };
 
+
 // ================================================================
 // METAS MENSAIS
 // ================================================================
 async function pgMetas() {
   const ct = document.getElementById('content');
-  ct.innerHTML = `
-    <div class="page-header"><h2>Metas Mensais</h2></div>
-    <div style="display:grid;grid-template-columns:360px 1fr;gap:20px;align-items:start">
-
-      <!-- FORMULÁRIO -->
-      <div class="card">
-        <h3 style="margin-bottom:6px">Definir meta do mês</h3>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Escolha o mês e informe quanto quer faturar. Vai aparecer no Dashboard como barra de progresso.</p>
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Mês <span class="required">*</span></label>
-            <input type="month" id="meta-mes" value="${mesAtual()}">
-          </div>
-          <div class="form-group">
-            <label>Meta de Receita (R$) <span class="required">*</span></label>
-            <input type="number" id="meta-receita" step="100" min="0" placeholder="Ex: 50000">
-          </div>
-          <div class="form-group">
-            <label>Meta de Atendimentos</label>
-            <input type="number" id="meta-atend" min="0" placeholder="Ex: 80 (opcional)">
-          </div>
-        </div>
-        <button class="btn btn-primary btn-full" onclick="salvarMeta()" id="btn-meta">Salvar Meta</button>
-      </div>
-
-      <!-- LISTA DE METAS -->
-      <div id="metas-lista">
-        <div style="text-align:center;padding:40px"><span class="spinner dark"></span></div>
-      </div>
-    </div>`;
-
+  ct.innerHTML =
+    '<div class="page-header"><h2>Metas Mensais</h2></div>' +
+    '<div style="display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start">' +
+    '<div class="card">' +
+    '<h3 style="margin-bottom:6px">Cadastrar / editar meta</h3>' +
+    '<p style="font-size:13px;color:var(--text2);margin-bottom:18px">Defina o faturamento que quer atingir no mês. O sistema mostra quanto falta e a porcentagem atingida.</p>' +
+    '<div class="form-group" style="margin-bottom:12px"><label>Mês</label><input type="month" id="meta-mes" value="' + mesAtual() + '"></div>' +
+    '<div class="form-group" style="margin-bottom:12px"><label>Meta de Receita (R$)</label><input type="number" id="meta-receita" step="500" min="0" placeholder="Ex: 50000"></div>' +
+    '<div class="form-group" style="margin-bottom:16px"><label>Meta de Atendimentos <span style="font-size:11px;color:var(--gray3)">(opcional)</span></label><input type="number" id="meta-atend" min="0" placeholder="Ex: 80"></div>' +
+    '<button class="btn btn-primary btn-full" onclick="salvarMeta()" id="btn-meta">Salvar Meta</button>' +
+    '</div>' +
+    '<div id="metas-lista"><div style="text-align:center;padding:40px"><span class="spinner dark"></span></div></div>' +
+    '</div>';
   await carregarMetas();
 }
 
@@ -1100,629 +1083,256 @@ window.salvarMeta = async function() {
   const receita  = parseFloat(document.getElementById('meta-receita').value);
   const atend    = parseInt(document.getElementById('meta-atend').value) || 0;
   if (!mesVal || !receita || receita <= 0) return toast('Informe o mês e a meta de receita', 'warning');
-
   const btn = document.getElementById('btn-meta');
   btn.innerHTML = spinnerHTML; btn.disabled = true;
-
-  const mesDate = mesVal + '-01';
   const { error } = await sb.from('metas').upsert(
-    { mes: mesDate, meta_receita: receita, meta_atendimentos: atend, updated_at: new Date().toISOString(), created_by: APP.user.id },
+    { mes: mesVal + '-01', meta_receita: receita, meta_atendimentos: atend, updated_at: new Date().toISOString(), created_by: APP.user.id },
     { onConflict: 'mes' }
   );
   btn.innerHTML = 'Salvar Meta'; btn.disabled = false;
-
-  if (error) return toast('Erro ao salvar: ' + error.message, 'error');
-  toast('Meta salva com sucesso!');
+  if (error) return toast('Erro: ' + error.message, 'error');
+  toast('Meta salva!');
   await carregarMetas();
 };
-
-async function carregarMetas() {
-  const ct = document.getElementById('metas-lista');
-  if (!ct) return;
-  ct.innerHTML = '<div style="text-align:center;padding:20px"><span class="spinner dark"></span></div>';
-
-  const { data: metas, error } = await sb.from('metas').select('*').order('mes', { ascending: false }).limit(12);
-  if (error || !metas?.length) {
-    ct.innerHTML = `<div class="card"><div class="empty-state">
-      <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom:12px;opacity:.3"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-      <p>Nenhuma meta cadastrada ainda.<br>Use o formulário ao lado para criar a primeira.</p>
-    </div></div>`;
-    return;
-  }
-
-  // Buscar realizado de cada mês em paralelo
-  const rows = await Promise.all(metas.map(async meta => {
-    const inicio = meta.mes.slice(0, 10);
-    const fim    = fimMes(meta.mes.slice(0, 7));
-    const { data: ents } = await sb.from('entradas').select('valor_liquido,valor_bruto')
-      .gte('data_venda', inicio).lte('data_venda', fim);
-    const realizado = ents?.reduce((s, r) => s + Number(r.valor_liquido), 0) || 0;
-    const atendimentos = ents?.length || 0;
-    const pct = meta.meta_receita > 0 ? Math.min(100, Math.round((realizado / meta.meta_receita) * 100)) : 0;
-    return { ...meta, realizado, atendimentos, pct };
-  }));
-
-  ct.innerHTML = rows.map(r => {
-    const cor = r.pct >= 100 ? 'var(--primary)' : r.pct >= 70 ? '#E67E22' : 'var(--danger)';
-    const icone = r.pct >= 100 ? '🎯' : r.pct >= 70 ? '📈' : '⚠️';
-    const isMesAtual = r.mes.slice(0, 7) === mesAtual();
-    return `<div class="card" style="margin-bottom:14px${isMesAtual ? ';border-left:4px solid var(--primary)' : ''}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-        <div>
-          <div style="font-size:12px;color:var(--gray4);font-weight:600;text-transform:uppercase;letter-spacing:.05em">${isMesAtual ? '● Mês atual' : mesLabel(r.mes)}</div>
-          <div style="font-size:18px;font-weight:700;margin-top:2px">${isMesAtual ? mesLabel(r.mes) : ''}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:28px;font-weight:800;color:${cor};line-height:1">${r.pct}%</div>
-          <div style="font-size:12px;color:var(--gray3)">da meta</div>
-        </div>
-      </div>
-
-      <!-- Barra de progresso -->
-      <div style="background:var(--gray2);border-radius:20px;height:12px;overflow:hidden;margin-bottom:10px">
-        <div style="height:100%;width:${r.pct}%;background:${cor};border-radius:20px;transition:width .6s ease"></div>
-      </div>
-
-      <!-- Números -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:10px">
-        <div style="background:var(--gray1);border-radius:8px;padding:10px">
-          <div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;margin-bottom:3px">Realizado</div>
-          <div style="font-size:15px;font-weight:700;color:${cor}">${fmt(r.realizado)}</div>
-        </div>
-        <div style="background:var(--gray1);border-radius:8px;padding:10px">
-          <div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;margin-bottom:3px">Meta</div>
-          <div style="font-size:15px;font-weight:700">${fmt(r.meta_receita)}</div>
-        </div>
-        <div style="background:var(--gray1);border-radius:8px;padding:10px">
-          <div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;margin-bottom:3px">Faltam</div>
-          <div style="font-size:15px;font-weight:700;color:${r.pct >= 100 ? 'var(--primary)' : 'var(--danger)'}">${r.pct >= 100 ? 'Meta atingida!' : fmt(r.meta_receita - r.realizado)}</div>
-        </div>
-      </div>
-
-      ${r.meta_atendimentos > 0 ? `
-      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--gray4);padding-top:8px;border-top:1px solid var(--gray2)">
-        <span>Atendimentos:</span>
-        <strong style="color:var(--text)">${r.atendimentos} / ${r.meta_atendimentos}</strong>
-        <div style="flex:1;background:var(--gray2);border-radius:10px;height:6px;overflow:hidden">
-          <div style="height:100%;width:${Math.min(100, Math.round(r.atendimentos/r.meta_atendimentos*100))}%;background:var(--info);border-radius:10px"></div>
-        </div>
-        <span>${Math.min(100, Math.round(r.atendimentos/r.meta_atendimentos*100))}%</span>
-      </div>` : ''}
-
-      <div style="margin-top:10px;display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" onclick="editarMeta('${r.mes.slice(0,7)}', ${r.meta_receita}, ${r.meta_atendimentos})">✏️ Editar</button>
-      </div>
-    </div>`;
-  }).join('');
-}
 
 window.editarMeta = function(mes, receita, atend) {
   document.getElementById('meta-mes').value    = mes;
   document.getElementById('meta-receita').value = receita;
   document.getElementById('meta-atend').value   = atend || '';
-  document.getElementById('meta-mes').scrollIntoView({ behavior: 'smooth' });
   document.getElementById('meta-receita').focus();
   toast('Edite os valores e clique em Salvar Meta', 'warning');
 };
+
+async function carregarMetas() {
+  const ct = document.getElementById('metas-lista');
+  if (!ct) return;
+  const { data: metas } = await sb.from('metas').select('*').order('mes', { ascending: false }).limit(12);
+  if (!metas || !metas.length) {
+    ct.innerHTML = '<div class="card"><div class="empty-state"><p>Nenhuma meta cadastrada ainda.</p><p style="margin-top:8px;font-size:13px">Use o formulário ao lado para criar a primeira meta.</p></div></div>';
+    return;
+  }
+  const rows = await Promise.all(metas.map(async m => {
+    const ini = m.mes.slice(0, 10);
+    const fim = fimMes(m.mes.slice(0, 7));
+    const { data: e } = await sb.from('entradas').select('valor_liquido').gte('data_venda', ini).lte('data_venda', fim);
+    const real  = (e || []).reduce((s, x) => s + Number(x.valor_liquido), 0);
+    const pct   = m.meta_receita > 0 ? Math.min(100, Math.round(real / m.meta_receita * 100)) : 0;
+    return { ...m, real, natend: (e||[]).length, pct };
+  }));
+
+  ct.innerHTML = rows.map(r => {
+    const cor      = r.pct >= 100 ? 'var(--primary)' : r.pct >= 70 ? '#E67E22' : 'var(--danger)';
+    const isAtual  = r.mes.slice(0, 7) === mesAtual();
+    const faltaVal = r.meta_receita - r.real;
+    const status   = r.pct >= 100
+      ? '<span class="badge badge-green">✓ Meta atingida!</span>'
+      : r.pct >= 70
+      ? '<span class="badge badge-orange">Bom ritmo</span>'
+      : '<span class="badge badge-red">Abaixo da meta</span>';
+    const borda    = isAtual ? 'border-left:4px solid var(--primary)' : 'border-left:4px solid var(--gray2)';
+    const destaque = isAtual ? '<span style="font-size:11px;color:var(--primary);font-weight:700;text-transform:uppercase;letter-spacing:.05em">● Mês atual</span><br>' : '';
+    const atendHTML = r.meta_atendimentos > 0
+      ? '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gray2)">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+        '<span style="font-size:12px;color:var(--gray4)">Atendimentos</span>' +
+        '<span style="font-size:12px;font-weight:700">' + r.natend + ' / ' + r.meta_atendimentos + '</span></div>' +
+        '<div style="background:var(--gray2);border-radius:10px;height:6px;overflow:hidden">' +
+        '<div style="height:100%;width:' + Math.min(100, Math.round(r.natend / r.meta_atendimentos * 100)) + '%;background:var(--info);border-radius:10px"></div></div></div>'
+      : '';
+    return '<div class="card" style="margin-bottom:14px;' + borda + '">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">' +
+      '<div>' + destaque + '<div style="font-size:17px;font-weight:700">' + mesLabel(r.mes) + '</div>' + status + '</div>' +
+      '<div style="text-align:right"><div style="font-size:32px;font-weight:900;color:' + cor + ';line-height:1">' + r.pct + '%</div>' +
+      '<div style="font-size:11px;color:var(--gray3)">da meta</div></div></div>' +
+      '<div style="background:var(--gray2);border-radius:20px;height:14px;overflow:hidden;margin-bottom:14px">' +
+      '<div style="height:100%;width:' + r.pct + '%;background:' + cor + ';border-radius:20px;transition:width .8s ease"></div></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">' +
+      '<div style="background:var(--gray1);border-radius:8px;padding:12px">' +
+      '<div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Realizado</div>' +
+      '<div style="font-size:16px;font-weight:800;color:' + cor + '">' + fmt(r.real) + '</div></div>' +
+      '<div style="background:var(--gray1);border-radius:8px;padding:12px">' +
+      '<div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Meta</div>' +
+      '<div style="font-size:16px;font-weight:800">' + fmt(r.meta_receita) + '</div></div>' +
+      '<div style="background:var(--gray1);border-radius:8px;padding:12px">' +
+      '<div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Faltam</div>' +
+      '<div style="font-size:16px;font-weight:800;color:' + (faltaVal > 0 ? 'var(--danger)' : 'var(--primary)') + '">' + (faltaVal > 0 ? fmt(faltaVal) : 'Atingida!') + '</div></div>' +
+      '</div>' + atendHTML +
+      '<button class="btn btn-secondary btn-sm" style="margin-top:12px" onclick="editarMeta(' + JSON.stringify(r.mes.slice(0,7)) + ',' + r.meta_receita + ',' + r.meta_atendimentos + ')">✏️ Editar meta</button>' +
+      '</div>';
+  }).join('');
+}
 
 // ================================================================
 // RELATÓRIO POR PROFISSIONAL
 // ================================================================
 async function pgRelatorios() {
   const ct = document.getElementById('content');
-  ct.innerHTML = `
-    <div class="page-header">
-      <h2>Relatório por Profissional</h2>
-      <button class="btn btn-secondary btn-sm no-print" onclick="window.print()">${Icons.print} Imprimir</button>
-    </div>
-    <div class="filter-bar">
-      <select id="rel-prof" style="width:180px">
-        <option value="">Todas as profissionais</option>
-        ${APP.profs.map(p => `<option>${p.nome}</option>`).join('')}
-      </select>
-      <input type="month" id="rel-mes-ini" value="2026-01" style="width:150px">
-      <span style="color:var(--gray3);font-size:13px">até</span>
-      <input type="month" id="rel-mes-fim" value="${mesAtual()}" style="width:150px">
-      <button class="btn btn-primary btn-sm" onclick="carregarRelatorio()">Filtrar</button>
-    </div>
-    <div id="rel-content">
-      <div style="text-align:center;padding:60px"><span class="spinner dark"></span></div>
-    </div>`;
-
+  ct.innerHTML =
+    '<div class="page-header"><h2>Desempenho por Profissional</h2></div>' +
+    '<div class="filter-bar">' +
+    '<select id="rel-prof" style="width:180px"><option value="">Todas as profissionais</option>' +
+    APP.profs.map(p => '<option>' + p.nome + '</option>').join('') +
+    '</select>' +
+    '<input type="month" id="rel-ini" value="2026-01" style="width:150px">' +
+    '<span style="color:var(--gray3);font-size:13px">até</span>' +
+    '<input type="month" id="rel-fim" value="' + mesAtual() + '" style="width:150px">' +
+    '<button class="btn btn-primary btn-sm" onclick="carregarRelatorio()">Filtrar</button>' +
+    '</div>' +
+    '<div id="rel-content"><div style="text-align:center;padding:60px"><span class="spinner dark"></span></div></div>';
   await carregarRelatorio();
 }
 
 window.carregarRelatorio = async function() {
-  const profFil  = document.getElementById('rel-prof')?.value || '';
-  const mesIni   = document.getElementById('rel-mes-ini')?.value || '2026-01';
-  const mesFim   = document.getElementById('rel-mes-fim')?.value || mesAtual();
-  const dataIni  = inicioMes(mesIni);
-  const dataFim  = fimMes(mesFim);
-
+  const profFil = document.getElementById('rel-prof')?.value || '';
+  const iniVal  = document.getElementById('rel-ini')?.value  || '2026-01';
+  const fimVal  = document.getElementById('rel-fim')?.value  || mesAtual();
+  const ini = inicioMes(iniVal);
+  const fim = fimMes(fimVal);
   const ct = document.getElementById('rel-content');
-  ct.innerHTML = '<div style="text-align:center;padding:40px"><span class="spinner dark"></span></div>';
+  if (ct) ct.innerHTML = '<div style="text-align:center;padding:40px"><span class="spinner dark"></span></div>';
 
-  // Buscar entradas do período
-  let q = sb.from('entradas').select('*')
-    .gte('data_venda', dataIni).lte('data_venda', dataFim)
-    .order('data_venda', { ascending: false });
+  let q = sb.from('entradas').select('*').gte('data_venda', ini).lte('data_venda', fim).order('data_venda', { ascending: false });
   if (profFil) q = q.eq('profissional_nome', profFil);
-  const { data: entradas, error } = await q;
-  if (error) { toast('Erro: ' + error.message, 'error'); return; }
+  const { data: rows } = await q;
 
-  const rows = entradas || [];
-  if (!rows.length) {
-    ct.innerHTML = '<div class="card"><div class="empty-state"><p>Nenhuma entrada encontrada no período</p></div></div>';
+  if (!rows?.length) {
+    if (ct) ct.innerHTML = '<div class="card"><div class="empty-state"><p>Nenhuma entrada no período selecionado.</p></div></div>';
     return;
   }
 
   // Agrupar por profissional
   const porProf = {};
   rows.forEach(r => {
-    const nome = r.profissional_nome || 'Não informado';
-    if (!porProf[nome]) porProf[nome] = { receita_bruta: 0, receita_liq: 0, taxas: 0, atend: 0, proc: {}, formas: {} };
-    const p = porProf[nome];
-    p.receita_bruta += Number(r.valor_bruto);
-    p.receita_liq   += Number(r.valor_liquido);
-    p.taxas         += Number(r.valor_taxa);
-    p.atend++;
-    p.proc[r.procedimento_nome || 'Outro'] = (p.proc[r.procedimento_nome || 'Outro'] || 0) + 1;
-    p.formas[r.forma] = (p.formas[r.forma] || 0) + 1;
+    const n = r.profissional_nome || 'Não informado';
+    if (!porProf[n]) porProf[n] = { liq: 0, bruto: 0, taxa: 0, atend: 0, procs: {} };
+    porProf[n].liq   += Number(r.valor_liquido);
+    porProf[n].bruto += Number(r.valor_bruto);
+    porProf[n].taxa  += Number(r.valor_taxa);
+    porProf[n].atend++;
+    const proc = r.procedimento_nome || 'Outro';
+    porProf[n].procs[proc] = (porProf[n].procs[proc] || 0) + 1;
   });
 
-  // Totais gerais
-  const totBruto = rows.reduce((s, r) => s + Number(r.valor_bruto), 0);
   const totLiq   = rows.reduce((s, r) => s + Number(r.valor_liquido), 0);
   const totAtend = rows.length;
-
-  // Agrupar por mês e profissional para os gráficos
-  const mesesSet = [...new Set(rows.map(r => r.data_venda.slice(0, 7)))].sort();
-  const profNomes = Object.keys(porProf);
+  const profNomes = Object.keys(porProf).sort((a, b) => porProf[b].liq - porProf[a].liq);
   const CORES = ['#117A65', '#1B4F72', '#8E44AD', '#D35400', '#C0392B'];
+  const mesesSet = [...new Set(rows.map(r => r.data_venda.slice(0, 7)))].sort();
 
-  ct.innerHTML = `
-    <!-- Cards totais gerais -->
-    <div class="metrics-grid" style="margin-bottom:20px">
-      <div class="metric-card"><div class="metric-label">Total de entradas</div><div class="metric-value">${fmt(totBruto)}</div><div class="metric-sub">${totAtend} atendimentos</div></div>
-      <div class="metric-card info"><div class="metric-label">Total líquido</div><div class="metric-value">${fmt(totLiq)}</div><div class="metric-sub">Após taxas</div></div>
-      <div class="metric-card"><div class="metric-label">Ticket médio geral</div><div class="metric-value">${fmt(totLiq / totAtend)}</div><div class="metric-sub">Por atendimento</div></div>
-    </div>
+  // Cards individuais por profissional
+  const cardsHTML = profNomes.map((nome, i) => {
+    const p      = porProf[nome];
+    const ticket = p.atend ? p.liq / p.atend : 0;
+    const pct    = totLiq > 0 ? Math.round(p.liq / totLiq * 100) : 0;
+    const cor    = CORES[i % CORES.length];
 
-    <!-- Cards por profissional -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:20px">
-      ${profNomes.map((nome, i) => {
-        const p = porProf[nome];
-        const ticket = p.atend ? p.receita_liq / p.atend : 0;
-        const pct = totLiq > 0 ? Math.round(p.receita_liq / totLiq * 100) : 0;
-        const topProc = Object.entries(p.proc).sort((a,b) => b[1]-a[1])[0];
-        return `<div class="card" style="border-left:4px solid ${CORES[i % CORES.length]}">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-            <div style="width:36px;height:36px;border-radius:50%;background:${CORES[i%CORES.length]}22;color:${CORES[i%CORES.length]};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${initials(nome)}</div>
-            <div>
-              <div style="font-weight:700;font-size:14px">${nome}</div>
-              <div style="font-size:11px;color:var(--gray3)">${pct}% do total</div>
-            </div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div style="background:var(--gray1);border-radius:6px;padding:8px">
-              <div style="font-size:10px;color:var(--gray4);text-transform:uppercase;font-weight:700">Líquido</div>
-              <div style="font-weight:800;font-size:15px;color:${CORES[i%CORES.length]}">${fmt(p.receita_liq)}</div>
-            </div>
-            <div style="background:var(--gray1);border-radius:6px;padding:8px">
-              <div style="font-size:10px;color:var(--gray4);text-transform:uppercase;font-weight:700">Atend.</div>
-              <div style="font-weight:800;font-size:15px">${p.atend}</div>
-            </div>
-            <div style="background:var(--gray1);border-radius:6px;padding:8px">
-              <div style="font-size:10px;color:var(--gray4);text-transform:uppercase;font-weight:700">Ticket</div>
-              <div style="font-weight:700;font-size:13px">${fmt(ticket)}</div>
-            </div>
-            <div style="background:var(--gray1);border-radius:6px;padding:8px">
-              <div style="font-size:10px;color:var(--gray4);text-transform:uppercase;font-weight:700">Top proc.</div>
-              <div style="font-weight:700;font-size:11px;color:var(--text2)">${topProc ? topProc[0].slice(0,14) : '-'}</div>
-            </div>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>
+    // Top 3 procedimentos com medalhas
+    const medalhas = ['🥇','🥈','🥉'];
+    const topProcs = Object.entries(p.procs).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
-    <!-- Gráficos -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-      <div class="card">
-        <h3 style="margin-bottom:14px">Receita líquida por profissional</h3>
-        <canvas id="chart-prof-barras" height="200"></canvas>
-      </div>
-      <div class="card">
-        <h3 style="margin-bottom:14px">Participação no faturamento</h3>
-        <div style="max-height:200px;display:flex;align-items:center;justify-content:center">
-          <canvas id="chart-prof-pizza"></canvas>
-        </div>
-      </div>
-    </div>
+    const procsHTML = topProcs.map((entry, idx) => {
+      const [procNome, procQtd] = entry;
+      const procEntradas = rows.filter(r => r.profissional_nome === nome && r.procedimento_nome === procNome);
+      const ticketProc   = procEntradas.length ? procEntradas.reduce((s, r) => s + Number(r.valor_liquido), 0) / procEntradas.length : 0;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--gray2)">' +
+        '<div>' +
+        '<div style="font-weight:600;font-size:13px">' + medalhas[idx] + ' ' + procNome + '</div>' +
+        '<div style="font-size:11px;color:var(--gray3)">ticket médio: ' + fmt(ticketProc) + '</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+        '<span class="badge badge-blue">' + procQtd + 'x</span>' +
+        '</div>' +
+        '</div>';
+    }).join('');
 
-    <!-- Tabela detalhada por procedimento -->
-    <div class="card" style="padding:0">
-      <div style="padding:14px 16px;font-weight:600;border-bottom:1px solid var(--gray2);display:flex;justify-content:space-between;align-items:center">
-        <span>Procedimentos realizados no período</span>
-      </div>
-      <div class="table-wrapper"><table>
-        <thead><tr><th>Procedimento</th>${profNomes.map(n => `<th style="text-align:right">${n}</th>`).join('')}<th style="text-align:right">Total</th></tr></thead>
-        <tbody>${(() => {
-          const todosProcs = [...new Set(rows.map(r => r.procedimento_nome || 'Outro'))].sort();
-          return todosProcs.map(proc => {
-            const countPorProf = profNomes.map(nome => {
-              const ents = rows.filter(r => (r.procedimento_nome || 'Outro') === proc && r.profissional_nome === nome);
-              return ents.length;
-            });
-            const total = countPorProf.reduce((s, v) => s + v, 0);
-            if (total === 0) return '';
-            return `<tr>
-              <td style="font-weight:500">${proc}</td>
-              ${countPorProf.map(c => `<td style="text-align:right">${c > 0 ? `<span class="badge badge-blue">${c}</span>` : '-'}</td>`).join('')}
-              <td style="text-align:right;font-weight:700">${total}</td>
-            </tr>`;
-          }).join('');
-        })()}</tbody>
-      </table></div>
-    </div>`;
+    return '<div class="card" style="margin-bottom:16px;border-top:4px solid ' + cor + '">' +
+      // Header
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--gray2)">' +
+      '<div style="width:48px;height:48px;border-radius:50%;background:' + cor + '22;color:' + cor + ';display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;flex-shrink:0">' + initials(nome) + '</div>' +
+      '<div style="flex:1">' +
+      '<div style="font-size:19px;font-weight:700">' + nome + '</div>' +
+      '<div style="font-size:12px;color:var(--gray4)">' + pct + '% do faturamento total do período</div>' +
+      '</div>' +
+      '</div>' +
+      // 3 métricas principais
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">' +
+      '<div style="background:var(--gray1);border-radius:8px;padding:12px;text-align:center">' +
+      '<div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;margin-bottom:4px">Receita Líquida</div>' +
+      '<div style="font-size:17px;font-weight:800;color:' + cor + '">' + fmt(p.liq) + '</div>' +
+      '</div>' +
+      '<div style="background:var(--gray1);border-radius:8px;padding:12px;text-align:center">' +
+      '<div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;margin-bottom:4px">Atendimentos</div>' +
+      '<div style="font-size:17px;font-weight:800">' + p.atend + '</div>' +
+      '</div>' +
+      '<div style="background:var(--gray1);border-radius:8px;padding:12px;text-align:center">' +
+      '<div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;margin-bottom:4px">Ticket Médio</div>' +
+      '<div style="font-size:17px;font-weight:800">' + fmt(ticket) + '</div>' +
+      '</div>' +
+      '</div>' +
+      // Barra de participação
+      '<div style="margin-bottom:16px">' +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray4);margin-bottom:5px">' +
+      '<span>Participação no faturamento</span><span style="font-weight:700;color:' + cor + '">' + pct + '%</span></div>' +
+      '<div style="background:var(--gray2);border-radius:10px;height:8px;overflow:hidden">' +
+      '<div style="height:100%;width:' + pct + '%;background:' + cor + ';border-radius:10px"></div></div>' +
+      '</div>' +
+      // Top procedimentos
+      '<div>' +
+      '<div style="font-size:11px;color:var(--gray4);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Top Procedimentos — quantidade e ticket médio</div>' +
+      procsHTML +
+      '</div>' +
+      '</div>';
+  }).join('');
 
-  // Gráfico de barras por mês e profissional
-  const dadosPorMes = mesesSet.map(m => {
+  if (ct) ct.innerHTML =
+    // Totais gerais
+    '<div class="metrics-grid" style="margin-bottom:20px">' +
+    '<div class="metric-card"><div class="metric-label">Total líquido do período</div><div class="metric-value">' + fmt(totLiq) + '</div><div class="metric-sub">' + totAtend + ' atendimentos</div></div>' +
+    '<div class="metric-card info"><div class="metric-label">Ticket médio geral</div><div class="metric-value">' + fmt(totAtend ? totLiq / totAtend : 0) + '</div><div class="metric-sub">Por atendimento</div></div>' +
+    '<div class="metric-card"><div class="metric-label">Profissionais ativas</div><div class="metric-value">' + profNomes.length + '</div></div>' +
+    '</div>' +
+    // Gráficos
+    '<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px">' +
+    '<div class="card"><h3 style="margin-bottom:14px">Receita líquida por mês</h3><canvas id="chart-prof" height="160"></canvas></div>' +
+    '<div class="card"><h3 style="margin-bottom:14px">Participação total</h3><div style="display:flex;align-items:center;justify-content:center;height:160px"><canvas id="chart-pizza"></canvas></div></div>' +
+    '</div>' +
+    cardsHTML;
+
+  // Gráfico barras
+  const byMes = mesesSet.map(m => {
     const obj = { mes: mesLabel(m + '-01') };
-    profNomes.forEach(nome => {
-      obj[nome] = rows.filter(r => r.data_venda.slice(0, 7) === m && r.profissional_nome === nome)
+    profNomes.forEach(n => {
+      obj[n] = rows.filter(r => r.data_venda.slice(0, 7) === m && r.profissional_nome === n)
         .reduce((s, r) => s + Number(r.valor_liquido), 0);
     });
     return obj;
   });
 
-  new Chart(document.getElementById('chart-prof-barras'), {
+  new Chart(document.getElementById('chart-prof'), {
     type: 'bar',
     data: {
-      labels: dadosPorMes.map(d => d.mes),
-      datasets: profNomes.map((nome, i) => ({
-        label: nome,
-        data: dadosPorMes.map(d => d[nome] || 0),
-        backgroundColor: CORES[i % CORES.length],
-        borderRadius: 4,
-      })),
+      labels: byMes.map(d => d.mes),
+      datasets: profNomes.map((n, i) => ({
+        label: n, data: byMes.map(d => d[n] || 0),
+        backgroundColor: CORES[i % CORES.length], borderRadius: 4,
+      }))
     },
-    options: {
-      responsive: true,
-      plugins: { legend: { position: 'bottom' } },
-      scales: { y: { ticks: { callback: v => fmt(v) }, grid: { color: '#F0F0F0' } } },
-    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { ticks: { callback: v => fmt(v) }, grid: { color: '#F0F0F0' } } } }
   });
 
-  // Pizza por profissional
-  new Chart(document.getElementById('chart-prof-pizza'), {
+  new Chart(document.getElementById('chart-pizza'), {
     type: 'doughnut',
     data: {
       labels: profNomes,
-      datasets: [{ data: profNomes.map(n => porProf[n].receita_liq), backgroundColor: CORES, borderWidth: 3 }],
+      datasets: [{ data: profNomes.map(n => porProf[n].liq), backgroundColor: CORES, borderWidth: 3 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { position: 'right' },
-        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${fmt(ctx.raw)} (${Math.round(ctx.raw / totLiq * 100)}%)` } },
-      },
-    },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.label + ': ' + fmt(ctx.raw) + ' (' + Math.round(ctx.raw / totLiq * 100) + '%)' } }
+      }
+    }
   });
 };
 
-// ================================================================
-// NOTIFICAÇÕES
-// ================================================================
-window.APP_NOTIF = { total: 0 };
-
-async function carregarNotificacoes() {
-  const { data } = await sb.from('notificacoes')
-    .select('*').eq('lida', false)
-    .eq('usuario_id', APP.user.id)
-    .order('created_at', { ascending: false })
-    .limit(20);
-
-  const notifs = data || [];
-  APP_NOTIF.total = notifs.length;
-  const badge = document.getElementById('notif-badge');
-  const lista = document.getElementById('notif-lista');
-  if (badge) badge.textContent = notifs.length > 0 ? notifs.length : '';
-  if (badge) badge.style.display = notifs.length > 0 ? 'flex' : 'none';
-  if (lista) {
-    lista.innerHTML = notifs.length === 0
-      ? '<div style="padding:20px;text-align:center;color:var(--gray3);font-size:13px">Nenhuma notificação</div>'
-      : notifs.map(n => `
-        <div style="padding:12px 16px;border-bottom:1px solid var(--gray2);cursor:pointer" onclick="marcarLida('${n.id}','${n.link_page||''}')">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            <span style="width:8px;height:8px;border-radius:50%;background:${n.tipo==='warning'?'var(--warning)':n.tipo==='success'?'var(--success)':'var(--info)'};flex-shrink:0"></span>
-            <span style="font-weight:600;font-size:13px">${n.titulo}</span>
-          </div>
-          <div style="font-size:12px;color:var(--text2);padding-left:16px">${n.mensagem}</div>
-          <div style="font-size:11px;color:var(--gray3);padding-left:16px;margin-top:3px">${new Date(n.created_at).toLocaleDateString('pt-BR')}</div>
-        </div>`).join('');
-  }
-}
-
-window.marcarLida = async function(id, page) {
-  await sb.from('notificacoes').update({ lida: true }).eq('id', id);
-  toggleNotifPanel();
-  await carregarNotificacoes();
-  if (page) navigate(page);
-};
-
-window.marcarTodasLidas = async function() {
-  await sb.from('notificacoes').update({ lida: true }).eq('usuario_id', APP.user.id).eq('lida', false);
-  await carregarNotificacoes();
-};
-
-window.toggleNotifPanel = function() {
-  const panel = document.getElementById('notif-panel');
-  if (!panel) return;
-  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-};
-
-// ================================================================
-// METAS MENSAIS
-// ================================================================
-async function pgMetas() {
-  const ct = document.getElementById('content');
-  ct.innerHTML = `
-    <div class="page-header"><h2>Metas Mensais</h2></div>
-    <div style="display:grid;grid-template-columns:360px 1fr;gap:20px;align-items:start">
-
-      <!-- FORMULÁRIO -->
-      <div class="card">
-        <h3 style="margin-bottom:6px">Definir meta do mês</h3>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Escolha o mês e informe quanto quer faturar. Vai aparecer no Dashboard como barra de progresso.</p>
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Mês <span class="required">*</span></label>
-            <input type="month" id="meta-mes" value="${mesAtual()}">
-          </div>
-          <div class="form-group">
-            <label>Meta de Receita (R$) <span class="required">*</span></label>
-            <input type="number" id="meta-receita" step="100" min="0" placeholder="Ex: 50000">
-          </div>
-          <div class="form-group">
-            <label>Meta de Atendimentos</label>
-            <input type="number" id="meta-atend" min="0" placeholder="Ex: 80 (opcional)">
-          </div>
-        </div>
-        <button class="btn btn-primary btn-full" onclick="salvarMeta()" id="btn-meta">Salvar Meta</button>
-      </div>
-
-      <!-- LISTA DE METAS -->
-      <div id="metas-lista">
-        <div style="text-align:center;padding:40px"><span class="spinner dark"></span></div>
-      </div>
-    </div>`;
-
-  await carregarMetas();
-}
-
-window.salvarMeta = async function() {
-  const mesVal   = document.getElementById('meta-mes').value;
-  const receita  = parseFloat(document.getElementById('meta-receita').value);
-  const atend    = parseInt(document.getElementById('meta-atend').value) || 0;
-  if (!mesVal || !receita || receita <= 0) return toast('Informe o mês e a meta de receita', 'warning');
-
-  const btn = document.getElementById('btn-meta');
-  btn.innerHTML = spinnerHTML; btn.disabled = true;
-
-  const mesDate = mesVal + '-01';
-  const { error } = await sb.from('metas').upsert(
-    { mes: mesDate, meta_receita: receita, meta_atendimentos: atend, updated_at: new Date().toISOString(), created_by: APP.user.id },
-    { onConflict: 'mes' }
-  );
-  btn.innerHTML = 'Salvar Meta'; btn.disabled = false;
-
-  if (error) return toast('Erro ao salvar: ' + error.message, 'error');
-  toast('Meta salva com sucesso!');
-  await carregarMetas();
-};
-
-async function carregarMetas() {
-  const ct = document.getElementById('metas-lista');
-  if (!ct) return;
-  ct.innerHTML = '<div style="text-align:center;padding:20px"><span class="spinner dark"></span></div>';
-
-  const { data: metas, error } = await sb.from('metas').select('*').order('mes', { ascending: false }).limit(12);
-  if (error || !metas?.length) {
-    ct.innerHTML = `<div class="card"><div class="empty-state">
-      <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom:12px;opacity:.3"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-      <p>Nenhuma meta cadastrada ainda.<br>Use o formulário ao lado para criar a primeira.</p>
-    </div></div>`;
-    return;
-  }
-
-  // Buscar realizado de cada mês em paralelo
-  const rows = await Promise.all(metas.map(async meta => {
-    const inicio = meta.mes.slice(0, 10);
-    const fim    = fimMes(meta.mes.slice(0, 7));
-    const { data: ents } = await sb.from('entradas').select('valor_liquido,valor_bruto')
-      .gte('data_venda', inicio).lte('data_venda', fim);
-    const realizado = ents?.reduce((s, r) => s + Number(r.valor_liquido), 0) || 0;
-    const atendimentos = ents?.length || 0;
-    const pct = meta.meta_receita > 0 ? Math.min(100, Math.round((realizado / meta.meta_receita) * 100)) : 0;
-    return { ...meta, realizado, atendimentos, pct };
-  }));
-
-  ct.innerHTML = rows.map(r => {
-    const cor = r.pct >= 100 ? 'var(--primary)' : r.pct >= 70 ? '#E67E22' : 'var(--danger)';
-    const icone = r.pct >= 100 ? '🎯' : r.pct >= 70 ? '📈' : '⚠️';
-    const isMesAtual = r.mes.slice(0, 7) === mesAtual();
-    return `<div class="card" style="margin-bottom:14px${isMesAtual ? ';border-left:4px solid var(--primary)' : ''}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-        <div>
-          <div style="font-size:12px;color:var(--gray4);font-weight:600;text-transform:uppercase;letter-spacing:.05em">${isMesAtual ? '● Mês atual' : mesLabel(r.mes)}</div>
-          <div style="font-size:18px;font-weight:700;margin-top:2px">${isMesAtual ? mesLabel(r.mes) : ''}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:28px;font-weight:800;color:${cor};line-height:1">${r.pct}%</div>
-          <div style="font-size:12px;color:var(--gray3)">da meta</div>
-        </div>
-      </div>
-
-      <!-- Barra de progresso -->
-      <div style="background:var(--gray2);border-radius:20px;height:12px;overflow:hidden;margin-bottom:10px">
-        <div style="height:100%;width:${r.pct}%;background:${cor};border-radius:20px;transition:width .6s ease"></div>
-      </div>
-
-      <!-- Números -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:10px">
-        <div style="background:var(--gray1);border-radius:8px;padding:10px">
-          <div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;margin-bottom:3px">Realizado</div>
-          <div style="font-size:15px;font-weight:700;color:${cor}">${fmt(r.realizado)}</div>
-        </div>
-        <div style="background:var(--gray1);border-radius:8px;padding:10px">
-          <div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;margin-bottom:3px">Meta</div>
-          <div style="font-size:15px;font-weight:700">${fmt(r.meta_receita)}</div>
-        </div>
-        <div style="background:var(--gray1);border-radius:8px;padding:10px">
-          <div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase;margin-bottom:3px">Faltam</div>
-          <div style="font-size:15px;font-weight:700;color:${r.pct >= 100 ? 'var(--primary)' : 'var(--danger)'}">${r.pct >= 100 ? 'Meta atingida!' : fmt(r.meta_receita - r.realizado)}</div>
-        </div>
-      </div>
-
-      ${r.meta_atendimentos > 0 ? `
-      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--gray4);padding-top:8px;border-top:1px solid var(--gray2)">
-        <span>Atendimentos:</span>
-        <strong style="color:var(--text)">${r.atendimentos} / ${r.meta_atendimentos}</strong>
-        <div style="flex:1;background:var(--gray2);border-radius:10px;height:6px;overflow:hidden">
-          <div style="height:100%;width:${Math.min(100, Math.round(r.atendimentos/r.meta_atendimentos*100))}%;background:var(--info);border-radius:10px"></div>
-        </div>
-        <span>${Math.min(100, Math.round(r.atendimentos/r.meta_atendimentos*100))}%</span>
-      </div>` : ''}
-
-      <div style="margin-top:10px;display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" onclick="editarMeta('${r.mes.slice(0,7)}', ${r.meta_receita}, ${r.meta_atendimentos})">✏️ Editar</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-window.editarMeta = function(mes, receita, atend) {
-  document.getElementById('meta-mes').value    = mes;
-  document.getElementById('meta-receita').value = receita;
-  document.getElementById('meta-atend').value   = atend || '';
-  document.getElementById('meta-mes').scrollIntoView({ behavior: 'smooth' });
-  document.getElementById('meta-receita').focus();
-  toast('Edite os valores e clique em Salvar Meta', 'warning');
-};
-
-// ================================================================
-// RELATÓRIO POR PROFISSIONAL
-// ================================================================
-async function pgRelatorios() {
-  const ct = document.getElementById('content');
-  ct.innerHTML = `
-    <div class="page-header">
-      <h2>Relatório por Profissional</h2>
-      <button class="btn btn-secondary btn-sm no-print" onclick="window.print()">${Icons.print} Imprimir</button>
-    </div>
-    <div class="filter-bar">
-      <select id="rel-prof" style="width:180px">
-        <option value="">Todas as profissionais</option>
-        ${APP.profs.map(p => `<option>${p.nome}</option>`).join('')}
-      </select>
-      <select id="rel-ano" style="width:120px"><option value="2026">2026</option></select>
-      <button class="btn btn-primary btn-sm" onclick="carregarRelatorio()">Filtrar</button>
-    </div>
-    <div id="rel-content"><div style="text-align:center;padding:40px"><span class="spinner dark"></span></div></div>`;
-  await carregarRelatorio();
-}
-
-window.carregarRelatorio = async function() {
-  const prof = document.getElementById('rel-prof')?.value || '';
-  let q = sb.from('vw_relatorio_profissional').select('*');
-  if (prof) q = q.eq('profissional_nome', prof);
-  const { data, error } = await q.order('mes', { ascending: false });
-  if (error) { toast('Erro: ' + error.message, 'error'); return; }
-  const rows = data || [];
-
-  // Totais por profissional
-  const totais = {};
-  rows.forEach(r => {
-    if (!totais[r.profissional_nome]) totais[r.profissional_nome] = { receita: 0, atend: 0, taxa: 0 };
-    totais[r.profissional_nome].receita += Number(r.receita_liquida);
-    totais[r.profissional_nome].atend   += Number(r.total_atendimentos);
-    totais[r.profissional_nome].taxa    += Number(r.total_taxas);
-  });
-
-  // Procedimentos mais feitos
-  const { data: procs } = await sb.from('vw_relatorio_procedimentos').select('*').limit(50);
-
-  const ct = document.getElementById('rel-content');
-  ct.innerHTML = `
-    <div class="metrics-grid" style="margin-bottom:20px">
-      ${Object.entries(totais).map(([nome, t]) => `
-        <div class="metric-card">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-            <div style="width:32px;height:32px;border-radius:50%;background:var(--primary-light);color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">${initials(nome)}</div>
-            <div class="metric-label" style="margin:0">${nome}</div>
-          </div>
-          <div class="metric-value">${fmt(t.receita)}</div>
-          <div class="metric-sub">${t.atend} atendimentos · ticket ${fmt(t.receita/t.atend)}</div>
-        </div>`).join('')}
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-      <div class="card"><h3 style="margin-bottom:14px">Receita por profissional</h3>
-        <canvas id="chart-rel-prof" height="160"></canvas></div>
-      <div class="card"><h3 style="margin-bottom:14px">Top procedimentos</h3>
-        <canvas id="chart-rel-proc" height="160"></canvas></div>
-    </div>
-
-    <div class="card" style="padding:0;margin-bottom:16px">
-      <div style="padding:14px 16px;font-weight:600;border-bottom:1px solid var(--gray2)">Detalhamento mensal</div>
-      <div class="table-wrapper"><table>
-        <thead><tr><th>Mês</th><th>Profissional</th><th style="text-align:right">Atendimentos</th><th style="text-align:right">Receita Bruta</th><th style="text-align:right">Receita Líquida</th><th style="text-align:right">Ticket Médio</th><th style="text-align:right">Parceladas</th></tr></thead>
-        <tbody>${rows.map(r => `<tr>
-          <td style="font-weight:500">${mesLabel(r.mes)}</td>
-          <td><div style="display:flex;align-items:center;gap:6px">
-            <div style="width:24px;height:24px;border-radius:50%;background:var(--primary-light);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${initials(r.profissional_nome)}</div>
-            ${r.profissional_nome}
-          </div></td>
-          <td style="text-align:right;font-weight:600">${r.total_atendimentos}</td>
-          <td style="text-align:right">${fmt(r.receita_bruta)}</td>
-          <td style="text-align:right;font-weight:700;color:var(--primary)">${fmt(r.receita_liquida)}</td>
-          <td style="text-align:right">${fmt(r.ticket_medio)}</td>
-          <td style="text-align:right"><span class="badge badge-blue">${r.vendas_parceladas}</span></td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-    </div>`;
-
-  // Gráfico por profissional
-  const profNomes = [...new Set(rows.map(r => r.profissional_nome))];
-  const mesesUniq = [...new Set(rows.map(r => mesLabel(r.mes)))].reverse();
-  const CORES_PROF = ['#117A65', '#1B4F72', '#8E44AD', '#D35400'];
-  new Chart(document.getElementById('chart-rel-prof'), {
-    type: 'bar',
-    data: {
-      labels: mesesUniq,
-      datasets: profNomes.map((nome, i) => ({
-        label: nome,
-        data: mesesUniq.map(m => {
-          const row = rows.find(r => mesLabel(r.mes) === m && r.profissional_nome === nome);
-          return row ? Number(row.receita_liquida) : 0;
-        }),
-        backgroundColor: CORES_PROF[i % CORES_PROF.length],
-        borderRadius: 4,
-      })),
-    },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { ticks: { callback: v => fmt(v) }, stacked: false } } },
-  });
-
-  // Gráfico procedimentos
-  const procTotais = {};
-  (procs || []).forEach(p => { procTotais[p.procedimento_nome] = (procTotais[p.procedimento_nome] || 0) + Number(p.total); });
-  const sortedProcs = Object.entries(procTotais).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  new Chart(document.getElementById('chart-rel-proc'), {
-    type: 'bar',
-    data: {
-      labels: sortedProcs.map(p => p[0]),
-      datasets: [{ label: 'Qtd', data: sortedProcs.map(p => p[1]), backgroundColor: '#1B4F72', borderRadius: 4 }],
-    },
-    options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { stepSize: 1 } } } },
-  });
-};
