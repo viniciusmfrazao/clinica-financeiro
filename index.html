@@ -80,6 +80,18 @@
 </div>
 
 <script src="js/core.js"></script>
-<script src="js/pages.js?v=1775346022"></script>
+<script>
+(async function() {
+  try {
+    const r = await fetch('https://avdqqbaeormqcvikpawn.supabase.co/functions/v1/paginas', {
+      headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2ZHFxYmFlb3JtcWN2aWtwYXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNzM1OTEsImV4cCI6MjA5MDY0OTU5MX0.EQHJI-ByJ8CRq1y_-GKDykj4vZe3UsngxYV25m3Mm3Y' }
+    });
+    const js = await r.text();
+    const s = document.createElement('script');
+    s.textContent = js;
+    document.head.appendChild(s);
+  } catch(e) { console.error('Erro ao carregar pages.js:', e); }
+})();
+</script>
 </body>
 </html>
