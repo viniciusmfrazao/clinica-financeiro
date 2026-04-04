@@ -597,8 +597,7 @@ window.exportSaidas = async function() {
   const fimVal = document.getElementById('s-mes-fim')?.value || mesAtual();
   const { data } = await sb.from('saidas').select('*').gte('data_saida', inicioMes(iniVal)).lte('data_saida', fimMes(fimVal)).order('data_saida', { ascending: false });
   const cols = ['data_saida', 'categoria', 'categoria_dre', 'descricao', 'valor', 'forma_pag', 'banco', 'tipo', 'observacoes'];
-  const csv = [cols.join(';'), ...(data || []).map(r => cols.map(c => String(r[c] ?? '').replace(/;/g, ',')).join(';'))].join('
-');
+  const csv = [cols.join(';'), ...(data || []).map(r => cols.map(c => String(r[c] ?? '').replace(/;/g, ',')).join(';'))].join('\n');
   const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv); a.download = `saidas_${iniVal}_${fimVal}.csv`; a.click();
 };
 
