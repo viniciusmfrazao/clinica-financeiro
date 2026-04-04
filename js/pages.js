@@ -12,6 +12,43 @@ window.limparFiltrosForma = function() {
   document.querySelectorAll('#fil-formas-wrap input').forEach(cb => cb.checked = false);
 };
 
+
+// ============================================================
+// EXCLUSÃO COM CONFIRMAÇÃO
+// ============================================================
+window.confirmarExcluir = function(tipo, id, nome) {
+  openModal(`<div class="modal-header">
+    <h3 style="color:var(--danger)">⚠️ Confirmar exclusão</h3>
+    <button class="btn" onclick="closeModal()" style="background:none;font-size:18px;color:var(--gray4)">×</button>
+  </div>
+  <div class="modal-body">
+    <p style="font-size:15px;margin-bottom:8px">Tem certeza que deseja excluir?</p>
+    <p style="font-weight:600;color:var(--danger);font-size:14px">${nome}</p>
+    <p style="font-size:12px;color:var(--gray3);margin-top:8px">Esta ação não pode ser desfeita.</p>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-danger" onclick="executarExcluir('${tipo}','${id}')">Sim, excluir</button>
+  </div>`);
+};
+
+window.executarExcluir = async function(tipo, id) {
+  closeModal();
+  let error;
+  if (tipo === 'entrada') {
+    await sb.from('parcelas').delete().eq('entrada_id', id);
+    ({ error } = await sb.from('entradas').delete().eq('id', id));
+    if (!error) { toast('Entrada excluída!'); carregarEntradas(); }
+  } else if (tipo === 'saida_sec') {
+    ({ error } = await sb.from('saidas_secretaria').delete().eq('id', id));
+    if (!error) { toast('Saída excluída!'); carregarSaiasSec(); }
+  } else if (tipo === 'saida_admin') {
+    ({ error } = await sb.from('saidas').delete().eq('id', id));
+    if (!error) { toast('Saída excluída!'); carregarSaidas(); }
+  }
+  if (error) toast('Erro: ' + error.message, 'error');
+};
+
 // ============================================================
 // NAVEGAÇÃO — ÚNICA, CORRETA
 // ============================================================
@@ -338,7 +375,7 @@ async function pgEntradas(){
       <button class="btn btn-secondary btn-sm no-print" onclick="window.print()">🖨 Imprimir</button>
     </div></div>
     <div class="filter-bar">
-      <input type="month" id="fil-mes" value="${mesAtual()}" style="width:145px">
+      <input type="date" id="fil-ini" value="${inicioMes(mesAtual())}" style="width:145px"><span style="color:var(--gray3);font-size:13px">até</span><input type="date" id="fil-fim" value="${hoje()}" style="width:145px">
       <input id="fil-busca" placeholder="Buscar paciente..." style="width:180px">
       <select id="fil-prof" style="width:145px"><option value="">Todos profissionais</option>${APP.profs.map(p=>`<option>${p.nome}</option>`).join('')}</select>
       <select id="fil-efet" style="width:145px"><option value="">Quem efetuou</option>${[...APP.profs.map(p=>p.nome),...APP.usuarios.filter(u=>u.perfil==='secretaria').map(u=>u.nome)].map(n=>`<option>${n}</option>`).join('')}</select>
@@ -364,14 +401,15 @@ async function pgEntradas(){
 }
 
 window.carregarEntradas=async function(){
-  const mes=document.getElementById('fil-mes')?.value||mesAtual();
+  const ini=document.getElementById('fil-ini')?.value||inicioMes(mesAtual());
+  const fim=document.getElementById('fil-fim')?.value||hoje();
   const busca=(document.getElementById('fil-busca')?.value||'').toLowerCase();
   const prof=document.getElementById('fil-prof')?.value||'';
   const efet=document.getElementById('fil-efet')?.value||'';
   const isGestora=APP.user.perfil==='gestora';
   // Coletar formas marcadas (multi-select)
   const formasSel=[...document.querySelectorAll('#fil-formas-wrap input:checked')].map(cb=>cb.value);
-  let q=sb.from('entradas').select('*').gte('data_venda',inicioMes(mes)).lte('data_venda',fimMes(mes)).order('data_venda',{ascending:false});
+  let q=sb.from('entradas').select('*').gte('data_venda',ini).lte('data_venda',fim).order('data_venda',{ascending:false});
   if(prof)q=q.eq('profissional_nome',prof);
   if(efet)q=q.eq('efetuou_venda',efet);
   if(formasSel.length===1)q=q.eq('forma',formasSel[0]);
@@ -393,7 +431,7 @@ window.carregarEntradas=async function(){
     <thead><tr><th>Data</th><th>Paciente</th><th>Procedimento</th><th>Profissional</th><th>Efetuou Venda</th><th>Forma</th><th style="text-align:right">Bruto</th>${isGestora?'<th style="text-align:right">Taxa</th><th style="text-align:right">Líquido</th>':''}<th>Ações</th></tr></thead>
     <tbody>${rows.map(r=>{
       const podeEdit=isGestora||(APP.user.perfil==='secretaria'&&r.lancado_por===APP.user.id);
-      return`<tr><td>${fmtData(r.data_venda)}</td><td style="font-weight:500">${r.paciente}</td><td>${r.procedimento_nome||'-'}</td><td>${r.profissional_nome||'-'}</td><td>${r.efetuou_venda||'-'}</td><td><span class="badge badge-blue">${r.forma}</span></td><td style="text-align:right">${fmt(r.valor_bruto)}</td>${isGestora?`<td style="text-align:right;color:var(--danger)">${fmtPct(r.taxa_pct)}</td><td style="text-align:right;font-weight:700;color:var(--primary)">${fmt(r.valor_liquido)}</td>`:''}<td>${podeEdit?`<button class="btn btn-secondary btn-sm" onclick="editEntrada('${r.id}')">✏</button>`:'-'}</td></tr>`;
+      return`<tr><td>${fmtData(r.data_venda)}</td><td style="font-weight:500">${r.paciente}</td><td>${r.procedimento_nome||'-'}</td><td>${r.profissional_nome||'-'}</td><td>${r.efetuou_venda||'-'}</td><td><span class="badge badge-blue">${r.forma}</span></td><td style="text-align:right">${fmt(r.valor_bruto)}</td>${isGestora?`<td style="text-align:right;color:var(--danger)">${fmtPct(r.taxa_pct)}</td><td style="text-align:right;font-weight:700;color:var(--primary)">${fmt(r.valor_liquido)}</td>`:''}<td style="display:flex;gap:4px">${podeEdit?`<button class="btn btn-secondary btn-sm" onclick="editEntrada('${r.id}')">✏</button><button class="btn btn-sm" style="background:var(--danger-light);color:var(--danger)" onclick="confirmarExcluir('entrada','${r.id}','${(r.paciente||'').replace(/'/g,'')}')">🗑</button>`:'-'}</td></tr>`;
     }).join('')}</tbody>
     ${isGestora?`<tfoot><tr><td colspan="6" style="font-weight:700">TOTAL</td><td style="text-align:right">${fmt(totB)}</td><td style="text-align:right;color:var(--danger)">${fmt(totT)}</td><td style="text-align:right;color:var(--primary)">${fmt(totL)}</td><td></td></tr></tfoot>`:''}
     </table></div>`:'<div class="empty-state"><p>Nenhuma entrada encontrada</p></div>';
@@ -404,15 +442,34 @@ window.editEntrada=async function(id){
   if(!r)return;
   const {procs,profs,usuarios}=APP;
   const efets=[...profs.map(p=>({nome:p.nome})),...usuarios.filter(u=>u.perfil==='secretaria').map(u=>({nome:u.nome}))];
+  const formas=['Pix','Dinheiro','Débito','Crédito 1x','Crédito 2x','Crédito 3x','Crédito 4x','Crédito 5x','Crédito 6x','Crédito 7x','Crédito 8x','Crédito 9x','Crédito 10x','Crédito 11x','Crédito 12x'];
+  const bandeiras=['Visa','Mastercard','Amex, Elo, outros'];
+  const ehCartao = r.forma?.startsWith('Crédito')||r.forma==='Débito';
   openModal(`<div class="modal-header"><h3>Editar Entrada</h3><button class="btn" onclick="closeModal()" style="background:none;font-size:18px;color:var(--gray4)">×</button></div>
     <div class="modal-body">
       <div class="form-grid c2">
         <div class="form-group"><label>Data</label><input type="date" id="ee-data" value="${r.data_venda}"></div>
-        <div class="form-group"><label>Paciente</label><input id="ee-pac" value="${r.paciente}"></div>
+        <div class="form-group"><label>Paciente</label><input id="ee-pac" value="${r.paciente||''}"></div>
       </div>
       <div class="form-grid c2">
         <div class="form-group"><label>Procedimento</label><select id="ee-proc"><option value="">Selecione</option>${procs.map(p=>`<option value="${p.id}" data-nome="${p.nome}" ${r.procedimento_id==p.id?'selected':''}>${p.nome}</option>`).join('')}</select></div>
         <div class="form-group"><label>Profissional</label><select id="ee-prof"><option value="">Selecione</option>${profs.map(p=>`<option value="${p.id}" data-nome="${p.nome}" ${r.profissional_id==p.id?'selected':''}>${p.nome}</option>`).join('')}</select></div>
+      </div>
+      <div class="form-grid c3">
+        <div class="form-group"><label>Forma de Pagamento</label>
+          <select id="ee-forma" onchange="eeToggleBand()">${formas.map(f=>`<option ${r.forma===f?'selected':''}>${f}</option>`).join('')}</select>
+        </div>
+        <div class="form-group" id="ee-grp-band" style="display:${ehCartao?'block':'none'}"><label>Bandeira</label>
+          <select id="ee-band"><option value="">Sem bandeira</option>${bandeiras.map(b=>`<option ${r.bandeira===b?'selected':''}>${b}</option>`).join('')}</select>
+        </div>
+        <div class="form-group"><label>Valor Bruto (R$)</label>
+          <input type="number" id="ee-valor" step="0.01" value="${r.valor_bruto}" oninput="eeAtualizarPreview()">
+        </div>
+      </div>
+      <div id="ee-preview" style="background:var(--gray1);border-radius:var(--rsm);padding:11px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div><div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase">Taxa</div><div id="ee-ptaxa" style="font-weight:700">—</div></div>
+        <div><div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase">Valor Taxa</div><div id="ee-pvtaxa" style="font-weight:700;color:var(--danger)">—</div></div>
+        <div><div style="font-size:10px;color:var(--gray4);font-weight:700;text-transform:uppercase">Líquido</div><div id="ee-pliq" style="font-weight:700;color:var(--primary)">—</div></div>
       </div>
       <div class="form-grid c2">
         <div class="form-group"><label>Quem efetuou a venda</label><select id="ee-efet"><option value="">Selecione</option>${efets.map(e=>`<option value="${e.nome}" ${r.efetuou_venda===e.nome?'selected':''}>${e.nome}</option>`).join('')}</select></div>
@@ -420,23 +477,76 @@ window.editEntrada=async function(id){
       </div>
     </div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarEditEntrada('${id}')">Salvar</button></div>`);
+  eeAtualizarPreview();
+};
+
+window.eeToggleBand = function() {
+  const forma = document.getElementById('ee-forma')?.value || '';
+  const eh = forma.startsWith('Crédito') || forma === 'Débito';
+  const grp = document.getElementById('ee-grp-band');
+  if (grp) grp.style.display = eh ? 'block' : 'none';
+  if (!eh && document.getElementById('ee-band')) document.getElementById('ee-band').value = '';
+  eeAtualizarPreview();
+};
+
+window.eeAtualizarPreview = function() {
+  const forma = document.getElementById('ee-forma')?.value || 'Pix';
+  const band  = document.getElementById('ee-band')?.value || null;
+  const val   = parseFloat(document.getElementById('ee-valor')?.value) || 0;
+  const taxa  = buscarTaxa(forma, band || null);
+  const vt    = Math.round(val * taxa * 100) / 100;
+  const liq   = Math.round((val - vt) * 100) / 100;
+  const ptaxa = document.getElementById('ee-ptaxa');
+  const pvtaxa= document.getElementById('ee-pvtaxa');
+  const pliq  = document.getElementById('ee-pliq');
+  if (ptaxa)  ptaxa.textContent  = (taxa * 100).toFixed(2) + '%';
+  if (pvtaxa) pvtaxa.textContent = fmt(vt);
+  if (pliq)   pliq.textContent   = fmt(liq);
 };
 
 window.salvarEditEntrada=async function(id){
   const pOpt=document.getElementById('ee-proc'), prOpt=document.getElementById('ee-prof');
+  const forma = document.getElementById('ee-forma')?.value || 'Pix';
+  const band  = document.getElementById('ee-band')?.value || null;
+  const val   = parseFloat(document.getElementById('ee-valor')?.value) || 0;
+  const taxa  = buscarTaxa(forma, band || null);
+  const vt    = Math.round(val * taxa * 100) / 100;
+  const liq   = Math.round((val - vt) * 100) / 100;
+  const n     = nParc(forma);
+  const data  = document.getElementById('ee-data').value;
+  const ant   = ehParc(forma) && data < MARCO;
   const {error}=await sb.from('entradas').update({
-    data_venda:document.getElementById('ee-data').value, paciente:document.getElementById('ee-pac').value.trim(),
-    procedimento_id:pOpt.value||null, procedimento_nome:pOpt.options[pOpt.selectedIndex]?.dataset.nome||'',
-    profissional_id:prOpt.value||null, profissional_nome:prOpt.options[prOpt.selectedIndex]?.dataset.nome||'',
-    efetuou_venda:document.getElementById('ee-efet').value||null, observacoes:document.getElementById('ee-obs').value||null,
-  }).eq('id',id);
-  if(error)return toast('Erro: '+error.message,'error');
+    data_venda: data,
+    paciente:   document.getElementById('ee-pac').value.trim(),
+    procedimento_id:  pOpt.value||null,
+    procedimento_nome: pOpt.options[pOpt.selectedIndex]?.dataset.nome||'',
+    profissional_id:  prOpt.value||null,
+    profissional_nome: prOpt.options[prOpt.selectedIndex]?.dataset.nome||'',
+    efetuou_venda: document.getElementById('ee-efet').value||null,
+    observacoes:   document.getElementById('ee-obs').value||null,
+    forma, bandeira: band||null,
+    valor_bruto: val, taxa_pct: taxa, valor_taxa: vt, valor_liquido: liq,
+    n_parcelas: n, antecipacao: ant,
+  }).eq('id', id);
+  if (error) return toast('Erro: '+error.message,'error');
+  // Recriar parcelas se necessário
+  await sb.from('parcelas').delete().eq('entrada_id', id);
+  if (n > 1 && !ant) {
+    const parcs = [];
+    for (let i = 1; i <= n; i++) {
+      const dt = new Date(data + 'T12:00:00');
+      dt.setMonth(dt.getMonth() + i);
+      parcs.push({ entrada_id: id, numero: i, total: n, data_venc: dt.toISOString().slice(0,10), valor: Math.round(liq/n*100)/100 });
+    }
+    await sb.from('parcelas').insert(parcs);
+  }
   toast('Atualizado!'); closeModal(); carregarEntradas();
 };
 
 window.exportEntradas=async function(){
-  const mes=document.getElementById('fil-mes')?.value||mesAtual();
-  const {data}=await sb.from('entradas').select('*').gte('data_venda',inicioMes(mes)).lte('data_venda',fimMes(mes)).order('data_venda',{ascending:false});
+  const ini=document.getElementById('fil-ini')?.value||inicioMes(mesAtual());
+  const fim=document.getElementById('fil-fim')?.value||hoje();
+  const {data}=await sb.from('entradas').select('*').gte('data_venda',ini).lte('data_venda',fim).order('data_venda',{ascending:false});
   const cols=['data_venda','paciente','procedimento_nome','profissional_nome','efetuou_venda','forma','bandeira','valor_bruto','taxa_pct','valor_taxa','valor_liquido','n_parcelas','antecipacao','observacoes'];
   const csv=[cols.join(';'),...(data||[]).map(r=>cols.map(c=>String(r[c]??'').replace(/;/g,',')).join(';'))].join('\n');
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download=`entradas_${mes}.csv`;a.click();
@@ -459,7 +569,7 @@ window.carregarSaiasSec=async function(){
   if(error){toast('Erro: '+error.message,'error');return;}
   const rows=data||[], tot=rows.reduce((s,r)=>s+Number(r.valor),0);
   const tbl=document.getElementById('ss-tbl');
-  tbl.innerHTML=`<div style="padding:12px 14px;background:var(--gray1);display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--gray4)">${rows.length} registros</span><span style="font-weight:700;color:var(--danger)">Total: ${fmt(tot)}</span></div>`+(rows.length?`<div class="table-wrapper"><table><thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Forma</th><th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${fmtData(r.data_saida)}</td><td><span class="badge badge-gray">${r.categoria}</span></td><td>${r.descricao}</td><td style="text-align:right;color:var(--danger);font-weight:600">${fmt(r.valor)}</td><td>${r.forma_pag||'-'}</td><td><button class="btn btn-secondary btn-sm" onclick="editSaidaSec('${r.id}')">✏</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state"><p>Nenhuma saída neste período</p></div>');
+  tbl.innerHTML=`<div style="padding:12px 14px;background:var(--gray1);display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--gray4)">${rows.length} registros</span><span style="font-weight:700;color:var(--danger)">Total: ${fmt(tot)}</span></div>`+(rows.length?`<div class="table-wrapper"><table><thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Forma</th><th>Ações</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${fmtData(r.data_saida)}</td><td><span class="badge badge-gray">${r.categoria}</span></td><td>${r.descricao}</td><td style="text-align:right;color:var(--danger);font-weight:600">${fmt(r.valor)}</td><td>${r.forma_pag||'-'}</td><td style="display:flex;gap:4px"><button class="btn btn-secondary btn-sm" onclick="editSaidaSec('${r.id}')">✏</button><button class="btn btn-sm" style="background:var(--danger-light);color:var(--danger)" onclick="confirmarExcluir('saida_sec','${r.id}','${(r.descricao||'').replace(/'/g,'')}')">🗑</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state"><p>Nenhuma saída neste período</p></div>');
 };
 
 window.editSaidaSec=async function(id){
@@ -1096,8 +1206,25 @@ window.salvarEditCad=async function(tipo,id){
 const CORES_PRESET=[{c:'#0B5345',n:'Verde Clínica'},{c:'#1A237E',n:'Azul Profundo'},{c:'#880E4F',n:'Rosa Escuro'},{c:'#1B5E20',n:'Verde Floresta'},{c:'#37474F',n:'Grafite'},{c:'#4A148C',n:'Roxo'},{c:'#BF360C',n:'Terracota'},{c:'#006064',n:'Teal'}];
 
 async function pgConfiguracoes(){
-  const cfg=APP.config;
   document.getElementById('content').innerHTML=`<h2 style="margin-bottom:18px">Configurações do Sistema</h2>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="abaCfg('visual',this)">Identidade Visual</button>
+      <button class="tab-btn" onclick="abaCfg('taxas',this)">Taxas & Antecipação</button>
+    </div>
+    <div id="cfg-ct"></div>`;
+  abaCfg('visual', document.querySelector('#content .tab-btn.active'));
+}
+
+window.abaCfg = function(aba, btn) {
+  document.querySelectorAll('#content .tab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  if (aba==='visual') renderCfgVisual();
+  else renderCfgTaxas();
+};
+
+async function renderCfgVisual(){
+  const cfg=APP.config;
+  document.getElementById('cfg-ct').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
       <div class="card">
         <h3 style="margin-bottom:14px">Identidade visual</h3>
@@ -1111,7 +1238,6 @@ async function pgConfiguracoes(){
         <div class="form-group" style="margin-bottom:14px">
           <label>Logo (URL pública)</label>
           <input id="cfg-logo" placeholder="https://..." value="${cfg.logo_url||''}">
-          <p style="font-size:11px;color:var(--gray3);margin-top:3px">Tamanho recomendado: 100×100px</p>
         </div>
         <button class="btn btn-primary btn-full" onclick="salvarConfig()">Salvar configurações</button>
       </div>
@@ -1121,9 +1247,6 @@ async function pgConfiguracoes(){
           <div id="pv-sidebar" style="background:var(--primary);padding:13px 15px;color:#fff">
             <div style="font-weight:700;font-size:13px" id="pv-nome">${cfg.nome||'Clínica Financeiro'}</div>
             <div style="font-size:11px;opacity:.55;margin-top:2px">Gestora</div>
-            <div style="margin-top:10px;display:flex;flex-direction:column;gap:3px">
-              ${['Dashboard','Nova Entrada','DRE'].map((m,i)=>`<div style="padding:5px 7px;background:${i===0?'rgba(255,255,255,.18)':'transparent'};border-radius:4px;font-size:12px">${m}</div>`).join('')}
-            </div>
           </div>
           <div style="padding:10px;background:#EEF1F3">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
@@ -1134,8 +1257,6 @@ async function pgConfiguracoes(){
         <div style="margin-top:13px">
           <h3 style="margin-bottom:10px">Exportação</h3>
           <div style="display:flex;flex-direction:column;gap:7px">
-            <button class="btn btn-secondary btn-full" onclick="navigate('fluxo');setTimeout(()=>window.print(),400)">🖨 Imprimir Fluxo de Caixa</button>
-            <button class="btn btn-secondary btn-full" onclick="navigate('dre');setTimeout(()=>window.print(),400)">🖨 Imprimir DRE</button>
             <button class="btn btn-secondary btn-full" onclick="exportarTudo()">↓ Exportar todos os dados (CSV)</button>
           </div>
         </div>
@@ -1143,56 +1264,77 @@ async function pgConfiguracoes(){
     </div>`;
 }
 
-window.selCor=function(cor,el){document.getElementById('cfg-cor').value=cor;document.getElementById('cfg-cor-custom').value=cor;document.querySelectorAll('.color-opt').forEach(e=>e.classList.remove('active'));el.classList.add('active');aplicarCor(cor);document.getElementById('pv-sidebar').style.background=cor;};
-window.selCorCustom=function(cor){document.getElementById('cfg-cor').value=cor;document.querySelectorAll('.color-opt').forEach(e=>e.classList.remove('active'));aplicarCor(cor);document.getElementById('pv-sidebar').style.background=cor;};
-window.salvarConfig=async function(){
-  const nome=document.getElementById('cfg-nome').value.trim(), cor=document.getElementById('cfg-cor').value, logo=document.getElementById('cfg-logo').value.trim()||null;
-  const {error}=await sb.from('config_sistema').update({nome,cor_primaria:cor,logo_url:logo,updated_at:new Date().toISOString()}).eq('id',1);
-  if(error)return toast('Erro: '+error.message,'error');
-  APP.config={...APP.config,nome,cor_primaria:cor,logo_url:logo};
-  document.querySelectorAll('#sys-nome,#login-nome').forEach(e=>e.textContent=nome); document.title=nome; document.getElementById('logo-char').textContent=nome[0].toUpperCase();
-  document.getElementById('pv-nome').textContent=nome;
-  toast('Configurações salvas!');
+async function renderCfgTaxas(){
+  const { data: taxas } = await sb.from('config_taxas').select('*').order('forma').order('bandeira');
+  const { data: cfgSys } = await sb.from('config_sistema').select('*').single();
+  const antecipacao = cfgSys?.antecipacao_ativa !== false;
+  const marco = cfgSys?.marco_antecipacao || '2026-02-04';
+
+  document.getElementById('cfg-ct').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+      <div class="card">
+        <h3 style="margin-bottom:4px">Antecipação de Recebíveis</h3>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Vendas parceladas antes do marco entram como antecipação (100% no mês da venda).</p>
+        <div class="form-grid c2" style="margin-bottom:12px">
+          <div class="form-group"><label>Data marco</label><input type="date" id="cfg-marco" value="${marco}"></div>
+          <div class="form-group"><label>Antecipação ativa?</label>
+            <select id="cfg-ant"><option value="true" ${antecipacao?'selected':''}>Sim</option><option value="false" ${!antecipacao?'selected':''}>Não</option></select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="salvarCfgAnt()">Salvar configuração</button>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:4px">Taxas por Forma de Pagamento</h3>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Edite as taxas — clique no valor para editar.</p>
+        <div class="table-wrapper"><table>
+          <thead><tr><th>Forma</th><th>Bandeira</th><th style="text-align:right">Taxa %</th><th>Ação</th></tr></thead>
+          <tbody>
+            ${(taxas||[]).map(t=>`<tr>
+              <td>${t.forma}</td>
+              <td>${t.bandeira||'—'}</td>
+              <td style="text-align:right" id="td-taxa-${t.id}">${(t.taxa*100).toFixed(3)}%</td>
+              <td><button class="btn btn-secondary btn-sm" onclick="editarTaxa('${t.id}','${t.forma}','${t.bandeira||''}',${t.taxa})">✏</button></td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </div>
+    </div>`;
+}
+
+window.salvarCfgAnt = async function() {
+  const marco = document.getElementById('cfg-marco').value;
+  const ant   = document.getElementById('cfg-ant').value === 'true';
+  const { error } = await sb.from('config_sistema').update({ marco_antecipacao: marco, antecipacao_ativa: ant }).eq('id', 1);
+  if (error) return toast('Erro: '+error.message,'error');
+  toast('Configuração salva!');
 };
-window.exportarTudo=async function(){
-  toast('Preparando...','warning');
-  const [e,s,ss]=await Promise.all([sb.from('entradas').select('*').order('data_venda'),sb.from('saidas').select('*').order('data_saida'),sb.from('saidas_secretaria').select('*').order('data_saida')]);
-  const toCSV=(data,cols)=>[cols.join(';'),...(data||[]).map(r=>cols.map(c=>String(r[c]??'').replace(/;/g,',')).join(';'))].join('\n');
-  [{nome:'entradas',data:e.data,cols:['data_venda','paciente','procedimento_nome','profissional_nome','efetuou_venda','forma','bandeira','valor_bruto','taxa_pct','valor_taxa','valor_liquido','n_parcelas','antecipacao']},{nome:'saidas',data:s.data,cols:['data_saida','categoria','categoria_dre','descricao','valor','forma_pag','banco','tipo']},{nome:'saidas_secretaria',data:ss.data,cols:['data_saida','categoria','descricao','valor','forma_pag','quem_pagou']}]
-    .forEach(({nome,data,cols})=>{const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(toCSV(data,cols));a.download=`${nome}_${hoje()}.csv`;a.click();});
+
+window.editarTaxa = function(id, forma, bandeira, taxaAtual) {
+  openModal(`<div class="modal-header"><h3>Editar Taxa</h3><button class="btn" onclick="closeModal()" style="background:none;font-size:18px;color:var(--gray4)">×</button></div>
+    <div class="modal-body">
+      <p style="margin-bottom:12px"><strong>${forma}</strong>${bandeira?' — '+bandeira:''}</p>
+      <div class="form-group"><label>Taxa (%)</label>
+        <input type="number" id="taxa-val" step="0.001" min="0" max="100" value="${(taxaAtual*100).toFixed(3)}" placeholder="Ex: 1.700">
+      </div>
+      <p style="font-size:12px;color:var(--gray3);margin-top:6px">Digite em porcentagem. Ex: 1.7 para 1,7%</p>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="salvarTaxa('${id}')">Salvar</button></div>`);
+  setTimeout(()=>document.getElementById('taxa-val')?.focus(),100);
 };
 
-// ============================================================
-// INICIALIZAÇÃO
-// ============================================================
-document.getElementById('topbar-data').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'long',year:'numeric'});
+window.salvarTaxa = async function(id) {
+  const pct = parseFloat(document.getElementById('taxa-val').value);
+  if (isNaN(pct) || pct < 0) return toast('Taxa inválida','warning');
+  const taxa = Math.round(pct / 100 * 100000) / 100000;
+  const { error } = await sb.from('config_taxas').update({ taxa }).eq('id', id);
+  if (error) return toast('Erro: '+error.message,'error');
+  // Atualizar APP.taxas
+  const t = APP.taxas.find(t=>t.id==id);
+  if (t) t.taxa = taxa;
+  toast('Taxa atualizada!'); closeModal();
+  renderCfgTaxas();
+};
 
-document.addEventListener('click',e=>{
-  const panel=document.getElementById('notif-panel');
-  if(panel&&!panel.contains(e.target)&&!e.target.closest('button[onclick="toggleNotif()"]')) panel.style.display='none';
-});
-
-(async function init(){
-  await carregarConfig();
-  const user=await checkAuth();
-  if(!user){
-    document.getElementById('login-screen').style.display='flex';
-    document.getElementById('form-login').addEventListener('submit',async e=>{
-      e.preventDefault();
-      const btn=document.getElementById('btn-login'), erro=document.getElementById('l-erro');
-      btn.innerHTML=spinnerHTML; btn.disabled=true; erro.style.display='none';
-      const {data,error}=await sb.auth.signInWithPassword({email:document.getElementById('l-email').value,password:document.getElementById('l-senha').value});
-      if(error){erro.textContent='E-mail ou senha incorretos';erro.style.display='block';btn.innerHTML='Entrar';btn.disabled=false;return;}
-      const {data:usr}=await sb.from('usuarios').select('*').eq('id',data.user.id).single();
-      if(!usr){erro.textContent='Usuário não cadastrado. Contate a gestora.';erro.style.display='block';btn.innerHTML='Entrar';btn.disabled=false;await sb.auth.signOut();return;}
-      APP.user={...data.user,...usr};
-      document.getElementById('login-screen').style.display='none';
-      await iniciarApp();
-    });
-    return;
-  }
-  await iniciarApp();
-})();
 
 async function iniciarApp(){
   const user=APP.user;
