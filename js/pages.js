@@ -1223,45 +1223,41 @@ window.abaCfg = function(aba, btn) {
 };
 
 async function renderCfgVisual(){
-  const cfg=APP.config;
-  document.getElementById('cfg-ct').innerHTML=`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
-      <div class="card">
-        <h3 style="margin-bottom:14px">Identidade visual</h3>
-        <div class="form-grid"><div class="form-group"><label>Nome do sistema</label><input id="cfg-nome" value="${cfg.nome||'Clínica Financeiro'}"></div></div>
-        <div class="form-group" style="margin-bottom:14px">
-          <label>Cor principal</label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">${CORES_PRESET.map(c=>`<div class="color-opt ${cfg.cor_primaria===c.c?'active':''}" style="background:${c.c}" title="${c.n}" onclick="selCor('${c.c}',this)"></div>`).join('')}</div>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:8px"><label style="font-size:12px;color:var(--gray4)">Personalizada:</label><input type="color" id="cfg-cor-custom" value="${cfg.cor_primaria||'#0B5345'}" style="width:40px;height:30px;padding:2px;cursor:pointer" oninput="selCorCustom(this.value)"></div>
-          <input type="hidden" id="cfg-cor" value="${cfg.cor_primaria||'#0B5345'}">
-        </div>
-        <div class="form-group" style="margin-bottom:14px">
-          <label>Logo (URL pública)</label>
-          <input id="cfg-logo" placeholder="https://..." value="${cfg.logo_url||''}">
-        </div>
-        <button class="btn btn-primary btn-full" onclick="salvarConfig()">Salvar configurações</button>
-      </div>
-      <div class="card">
-        <h3 style="margin-bottom:14px">Prévia</h3>
-        <div style="border:1.5px solid var(--gray2);border-radius:8px;overflow:hidden">
-          <div id="pv-sidebar" style="background:var(--primary);padding:13px 15px;color:#fff">
-            <div style="font-weight:700;font-size:13px" id="pv-nome">${cfg.nome||'Clínica Financeiro'}</div>
-            <div style="font-size:11px;opacity:.55;margin-top:2px">Gestora</div>
-          </div>
-          <div style="padding:10px;background:#EEF1F3">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
-              ${['Receita Hoje','Resultado Mês'].map(l=>`<div style="background:#fff;border-radius:5px;padding:9px;border-left:3px solid var(--primary)"><div style="font-size:9px;color:var(--gray4)">${l}</div><div style="font-weight:700;font-size:14px;margin-top:1px">R$ 0,00</div></div>`).join('')}
-            </div>
-          </div>
-        </div>
-        <div style="margin-top:13px">
-          <h3 style="margin-bottom:10px">Exportação</h3>
-          <div style="display:flex;flex-direction:column;gap:7px">
-            <button class="btn btn-secondary btn-full" onclick="exportarTudo()">↓ Exportar todos os dados (CSV)</button>
-          </div>
-        </div>
-      </div>
-    </div>`;
+  const cfg = APP.config;
+  const ct = document.getElementById('cfg-ct');
+  if (!ct) return;
+
+  let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">';
+  html += '<div class="card">';
+  html += '<h3 style="margin-bottom:14px">Identidade visual</h3>';
+  html += '<div class="form-grid"><div class="form-group"><label>Nome do sistema</label><input id="cfg-nome" value="' + (cfg.nome||'Clínica Financeiro') + '"></div></div>';
+  html += '<div class="form-group" style="margin-bottom:14px"><label>Cor principal</label>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">';
+  CORES_PRESET.forEach(c => {
+    html += '<div class="color-opt ' + (cfg.cor_primaria===c.c?'active':'') + '" style="background:' + c.c + '" title="' + c.n + '" onclick="selCor(' + "'" + c.c + "'" + ',this)"></div>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-top:8px"><label style="font-size:12px;color:var(--gray4)">Personalizada:</label>';
+  html += '<input type="color" id="cfg-cor-custom" value="' + (cfg.cor_primaria||'#0B5345') + '" style="width:40px;height:30px;padding:2px;cursor:pointer" oninput="selCorCustom(this.value)"></div>';
+  html += '<input type="hidden" id="cfg-cor" value="' + (cfg.cor_primaria||'#0B5345') + '"></div>';
+  html += '<div class="form-group" style="margin-bottom:14px"><label>Logo (URL pública)</label>';
+  html += '<input id="cfg-logo" placeholder="https://..." value="' + (cfg.logo_url||'') + '"></div>';
+  html += '<button class="btn btn-primary btn-full" onclick="salvarConfig()">Salvar configurações</button></div>';
+  html += '<div class="card"><h3 style="margin-bottom:14px">Prévia</h3>';
+  html += '<div style="border:1.5px solid var(--gray2);border-radius:8px;overflow:hidden">';
+  html += '<div id="pv-sidebar" style="background:var(--primary);padding:13px 15px;color:#fff">';
+  html += '<div style="font-weight:700;font-size:13px" id="pv-nome">' + (cfg.nome||'Clínica Financeiro') + '</div>';
+  html += '<div style="font-size:11px;opacity:.55;margin-top:2px">Gestora</div></div>';
+  html += '<div style="padding:10px;background:#EEF1F3"><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">';
+  ['Receita Hoje','Resultado Mês'].forEach(l => {
+    html += '<div style="background:#fff;border-radius:5px;padding:9px;border-left:3px solid var(--primary)"><div style="font-size:9px;color:var(--gray4)">' + l + '</div><div style="font-weight:700;font-size:14px;margin-top:1px">R$ 0,00</div></div>';
+  });
+  html += '</div></div></div>';
+  html += '<div style="margin-top:13px"><h3 style="margin-bottom:10px">Exportação</h3>';
+  html += '<div style="display:flex;flex-direction:column;gap:7px">';
+  html += '<button class="btn btn-secondary btn-full" onclick="exportarTudo()">↓ Exportar todos os dados (CSV)</button>';
+  html += '</div></div></div></div>';
+  ct.innerHTML = html;
 }
 
 async function renderCfgTaxas(){
@@ -1269,36 +1265,27 @@ async function renderCfgTaxas(){
   const { data: cfgSys } = await sb.from('config_sistema').select('*').single();
   const antecipacao = cfgSys?.antecipacao_ativa !== false;
   const marco = cfgSys?.marco_antecipacao || '2026-02-04';
+  const ct = document.getElementById('cfg-ct');
+  if (!ct) return;
 
-  document.getElementById('cfg-ct').innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
-      <div class="card">
-        <h3 style="margin-bottom:4px">Antecipação de Recebíveis</h3>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Vendas parceladas antes do marco entram como antecipação (100% no mês da venda).</p>
-        <div class="form-grid c2" style="margin-bottom:12px">
-          <div class="form-group"><label>Data marco</label><input type="date" id="cfg-marco" value="${marco}"></div>
-          <div class="form-group"><label>Antecipação ativa?</label>
-            <select id="cfg-ant"><option value="true" ${antecipacao?'selected':''}>Sim</option><option value="false" ${!antecipacao?'selected':''}>Não</option></select>
-          </div>
-        </div>
-        <button class="btn btn-primary" onclick="salvarCfgAnt()">Salvar configuração</button>
-      </div>
-      <div class="card">
-        <h3 style="margin-bottom:4px">Taxas por Forma de Pagamento</h3>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Edite as taxas — clique no valor para editar.</p>
-        <div class="table-wrapper"><table>
-          <thead><tr><th>Forma</th><th>Bandeira</th><th style="text-align:right">Taxa %</th><th>Ação</th></tr></thead>
-          <tbody>
-            ${(taxas||[]).map(t=>`<tr>
-              <td>${t.forma}</td>
-              <td>${t.bandeira||'—'}</td>
-              <td style="text-align:right" id="td-taxa-${t.id}">${(t.taxa*100).toFixed(3)}%</td>
-              <td><button class="btn btn-secondary btn-sm" onclick="editarTaxa('${t.id}','${t.forma}','${t.bandeira||''}',${t.taxa})">✏</button></td>
-            </tr>`).join('')}
-          </tbody>
-        </table></div>
-      </div>
-    </div>`;
+  let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">';
+  html += '<div class="card"><h3 style="margin-bottom:4px">Antecipação de Recebíveis</h3>';
+  html += '<p style="font-size:13px;color:var(--text2);margin-bottom:14px">Vendas parceladas antes do marco entram como antecipação (100% no mês da venda).</p>';
+  html += '<div class="form-grid c2" style="margin-bottom:12px">';
+  html += '<div class="form-group"><label>Data marco</label><input type="date" id="cfg-marco" value="' + marco + '"></div>';
+  html += '<div class="form-group"><label>Antecipação ativa?</label>';
+  html += '<select id="cfg-ant"><option value="true" ' + (antecipacao?'selected':'') + '>Sim</option><option value="false" ' + (!antecipacao?'selected':'') + '>Não</option></select></div></div>';
+  html += '<button class="btn btn-primary" onclick="salvarCfgAnt()">Salvar configuração</button></div>';
+  html += '<div class="card"><h3 style="margin-bottom:4px">Taxas por Forma de Pagamento</h3>';
+  html += '<p style="font-size:13px;color:var(--text2);margin-bottom:12px">Edite as taxas — clique no valor para editar.</p>';
+  html += '<div class="table-wrapper"><table><thead><tr><th>Forma</th><th>Bandeira</th><th style="text-align:right">Taxa %</th><th>Ação</th></tr></thead><tbody>';
+  (taxas||[]).forEach(t => {
+    html += '<tr><td>' + t.forma + '</td><td>' + (t.bandeira||'—') + '</td>';
+    html += '<td style="text-align:right" id="td-taxa-' + t.id + '">' + (t.taxa*100).toFixed(3) + '%</td>';
+    html += '<td><button class="btn btn-secondary btn-sm" onclick="editarTaxa(' + JSON.stringify(t.id) + ',' + JSON.stringify(t.forma) + ',' + JSON.stringify(t.bandeira||'') + ',' + t.taxa + ')">✏</button></td></tr>';
+  });
+  html += '</tbody></table></div></div></div>';
+  ct.innerHTML = html;
 }
 
 window.salvarCfgAnt = async function() {
