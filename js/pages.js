@@ -7,6 +7,7 @@ const PAGINAS = {
   saida_dia:       pgSaidaDia,
   saida_completa:  pgSaidaCompleta,
   entradas:        pgEntradas,
+  saidas_relatorio: pgSaidas,
   fluxo:           pgFluxo,
   dre:             pgDRE,
   recebiveis:      pgRecebiveis,
@@ -326,6 +327,7 @@ async function pgEntradas(){
       <input type="month" id="fil-mes" value="${mesAtual()}" style="width:155px">
       <input id="fil-busca" placeholder="Buscar paciente ou procedimento..." style="flex:1;min-width:180px">
       <select id="fil-prof" style="width:150px"><option value="">Todos profissionais</option>${APP.profs.map(p=>`<option>${p.nome}</option>`).join('')}</select>
+      <select id="fil-forma" style="width:140px"><option value="">Todas as formas</option>${['Pix','Dinheiro','Débito','Crédito 1x','Crédito 2x','Crédito 3x','Crédito 4x','Crédito 5x','Crédito 6x','Crédito 7x','Crédito 8x','Crédito 9x','Crédito 10x','Crédito 11x','Crédito 12x'].map(f=>`<option>${f}</option>`).join('')}</select>
       <button class="btn btn-primary btn-sm" onclick="carregarEntradas()">Filtrar</button>
     </div>
     <div class="metrics-grid" id="ent-totais" style="grid-template-columns:repeat(${isGestora?3:1},1fr);margin-bottom:14px"></div>
@@ -338,9 +340,11 @@ window.carregarEntradas=async function(){
   const mes=document.getElementById('fil-mes')?.value||mesAtual();
   const busca=(document.getElementById('fil-busca')?.value||'').toLowerCase();
   const prof=document.getElementById('fil-prof')?.value||'';
+  const forma=document.getElementById('fil-forma')?.value||'';
   const isGestora=APP.user.perfil==='gestora';
   let q=sb.from('entradas').select('*').gte('data_venda',inicioMes(mes)).lte('data_venda',fimMes(mes)).order('data_venda',{ascending:false});
   if(prof)q=q.eq('profissional_nome',prof);
+  if(forma)q=q.eq('forma',forma);
   const {data,error}=await q;
   if(error){toast('Erro: '+error.message,'error');return;}
   let rows=data||[];
@@ -445,6 +449,157 @@ window.salvarEditSaidaSec=async function(id){
   const {error}=await sb.from('saidas_secretaria').update({data_saida:document.getElementById('es-data').value,categoria:document.getElementById('es-cat').value,descricao:document.getElementById('es-desc').value.trim(),valor:parseFloat(document.getElementById('es-val').value),forma_pag:document.getElementById('es-forma').value||null}).eq('id',id);
   if(error)return toast('Erro: '+error.message,'error');
   toast('Atualizado!'); closeModal(); carregarSaiasSec();
+};
+
+// ============================================================
+// RELATÓRIO DE SAÍDAS
+// ============================================================
+async function pgSaidas() {
+  const ct = document.getElementById('content');
+  ct.innerHTML = `
+    <div class="page-header">
+      <h2>Relatório de Saídas</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm no-print" onclick="exportSaidas()">↓ CSV</button>
+        <button class="btn btn-secondary btn-sm no-print" onclick="window.print()">🖨 Imprimir</button>
+      </div>
+    </div>
+    <div class="filter-bar">
+      <input type="month" id="s-mes-ini" value="2026-01" style="width:150px">
+      <span style="color:var(--gray3);font-size:13px">até</span>
+      <input type="month" id="s-mes-fim" value="${mesAtual()}" style="width:150px">
+      <select id="s-cat-fil" style="width:200px">
+        <option value="">Todas as categorias</option>
+        <option>CMV / Insumos</option>
+        <option>Despesas com Pessoal</option>
+        <option>Despesas Administrativas</option>
+        <option>Despesas com Vendas</option>
+        <option>Impostos e Obrigações</option>
+        <option>Despesas Financeiras</option>
+        <option>Outros</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="carregarSaidas()">Filtrar</button>
+    </div>
+    <div id="saidas-metrics" class="metrics-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+      <div class="card"><h3 style="margin-bottom:12px">Por categoria DRE</h3><div style="max-height:220px;display:flex;align-items:center;justify-content:center"><canvas id="c-saidas-pizza"></canvas></div></div>
+      <div class="card"><h3 style="margin-bottom:12px">Evolução mensal</h3><canvas id="c-saidas-bar" height="220"></canvas></div>
+    </div>
+    <div class="card" style="padding:0" id="saidas-tabela">
+      <div style="text-align:center;padding:40px"><span class="spinner dark"></span></div>
+    </div>`;
+  await carregarSaidas();
+}
+
+window.carregarSaidas = async function() {
+  const iniVal = document.getElementById('s-mes-ini')?.value || '2026-01';
+  const fimVal = document.getElementById('s-mes-fim')?.value || mesAtual();
+  const catFil = document.getElementById('s-cat-fil')?.value || '';
+  const ini = inicioMes(iniVal), fim = fimMes(fimVal);
+
+  let q = sb.from('saidas').select('*').gte('data_saida', ini).lte('data_saida', fim).order('data_saida', { ascending: false });
+  if (catFil) q = q.eq('categoria_dre', catFil);
+  const { data: rows, error } = await q;
+  if (error) { toast('Erro: ' + error.message, 'error'); return; }
+
+  const saidas = rows || [];
+  const total = saidas.reduce((s, r) => s + Number(r.valor), 0);
+
+  // Totais por categoria
+  const porCat = {};
+  saidas.forEach(r => {
+    const c = r.categoria_dre || 'Outros';
+    porCat[c] = (porCat[c] || 0) + Number(r.valor);
+  });
+
+  // Totais por mês para gráfico
+  const porMes = {};
+  saidas.forEach(r => {
+    const m = r.data_saida.slice(0, 7);
+    porMes[m] = (porMes[m] || 0) + Number(r.valor);
+  });
+
+  // Métricas
+  const metrics = document.getElementById('saidas-metrics');
+  if (metrics) {
+    const topCat = Object.entries(porCat).sort((a, b) => b[1] - a[1])[0];
+    metrics.innerHTML = [
+      { l: 'Total de Saídas', v: fmt(total), s: saidas.length + ' lançamentos', c: 'danger' },
+      { l: 'Média mensal', v: fmt(total / Math.max(1, Object.keys(porMes).length)), s: 'Por mês', c: '' },
+      { l: 'Maior categoria', v: topCat ? topCat[0].split(' / ')[0] : '-', s: topCat ? fmt(topCat[1]) : '', c: 'info' },
+      { l: 'Categorias', v: Object.keys(porCat).length, s: 'Tipos diferentes', c: '' },
+    ].map(c => `<div class="metric-card ${c.c}"><div class="metric-label">${c.l}</div><div class="metric-value">${c.v}</div><div class="metric-sub">${c.s}</div></div>`).join('');
+  }
+
+  // Gráfico pizza por categoria
+  const CORES_CAT = { 'CMV / Insumos': '#E57373', 'Despesas com Pessoal': '#64B5F6', 'Despesas Administrativas': '#FFD54F', 'Despesas com Vendas': '#81C784', 'Impostos e Obrigações': '#CE93D8', 'Despesas Financeiras': '#80DEEA', 'Outros': '#BCAAA4' };
+  const catLabels = Object.keys(porCat);
+  const catVals   = Object.values(porCat);
+  const catCores  = catLabels.map(k => CORES_CAT[k] || '#BCAAA4');
+
+  const pizzaEl = document.getElementById('c-saidas-pizza');
+  if (pizzaEl) {
+    new Chart(pizzaEl, {
+      type: 'doughnut',
+      data: { labels: catLabels, datasets: [{ data: catVals, backgroundColor: catCores, borderWidth: 2 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' }, tooltip: { callbacks: { label: ctx => ' ' + ctx.label + ': ' + fmt(ctx.raw) + ' (' + Math.round(ctx.raw / total * 100) + '%)' } } } }
+    });
+  }
+
+  // Gráfico barras por mês
+  const mesesSort = Object.keys(porMes).sort();
+  const barEl = document.getElementById('c-saidas-bar');
+  if (barEl) {
+    new Chart(barEl, {
+      type: 'bar',
+      data: { labels: mesesSort.map(m => mesLabel(m + '-01')), datasets: [{ label: 'Saídas', data: mesesSort.map(m => porMes[m]), backgroundColor: '#E57373', borderRadius: 4 }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: v => fmt(v) }, grid: { color: '#F0F0F0' } } } }
+    });
+  }
+
+  // Tabela
+  const tbl = document.getElementById('saidas-tabela');
+  if (!tbl) return;
+
+  // Subtotais por categoria
+  const catOrdem = ['CMV / Insumos', 'Despesas com Pessoal', 'Despesas Administrativas', 'Despesas com Vendas', 'Impostos e Obrigações', 'Despesas Financeiras', 'Outros'];
+  const resumoHTML = `
+    <div style="padding:14px 16px;border-bottom:1px solid var(--gray2)">
+      <h3 style="margin-bottom:10px">Resumo por categoria</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px">
+        ${catOrdem.filter(c => porCat[c]).map(c => `
+          <div style="background:var(--gray1);border-radius:7px;padding:10px;border-left:3px solid ${CORES_CAT[c]}">
+            <div style="font-size:11px;color:var(--gray4);font-weight:700;text-transform:uppercase;margin-bottom:3px">${c}</div>
+            <div style="font-size:15px;font-weight:800;color:var(--danger)">${fmt(porCat[c])}</div>
+            <div style="font-size:11px;color:var(--gray3)">${Math.round(porCat[c] / total * 100)}% do total</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+
+  tbl.innerHTML = resumoHTML + (saidas.length ? `
+    <div class="table-wrapper"><table>
+      <thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Forma Pag.</th><th>Banco</th><th>Tipo</th></tr></thead>
+      <tbody>${saidas.map(r => `<tr>
+        <td>${fmtData(r.data_saida)}</td>
+        <td><span class="badge badge-red" style="background:${CORES_CAT[r.categoria_dre] || '#BCAAA4'}22;color:${CORES_CAT[r.categoria_dre] || '#999'}">${r.categoria_dre || '-'}</span></td>
+        <td style="font-weight:500">${r.descricao}</td>
+        <td style="text-align:right;font-weight:700;color:var(--danger)">${fmt(r.valor)}</td>
+        <td>${r.forma_pag || '-'}</td>
+        <td>${r.banco || '-'}</td>
+        <td><span class="badge ${r.tipo === 'Fixo' ? 'badge-blue' : 'badge-gray'}">${r.tipo || '-'}</span></td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="3" style="font-weight:700">TOTAL</td><td style="text-align:right;font-weight:800;color:var(--danger)">${fmt(total)}</td><td colspan="3"></td></tr></tfoot>
+    </table></div>` : '<div class="empty-state"><p>Nenhuma saída no período</p></div>');
+};
+
+window.exportSaidas = async function() {
+  const iniVal = document.getElementById('s-mes-ini')?.value || '2026-01';
+  const fimVal = document.getElementById('s-mes-fim')?.value || mesAtual();
+  const { data } = await sb.from('saidas').select('*').gte('data_saida', inicioMes(iniVal)).lte('data_saida', fimMes(fimVal)).order('data_saida', { ascending: false });
+  const cols = ['data_saida', 'categoria', 'categoria_dre', 'descricao', 'valor', 'forma_pag', 'banco', 'tipo', 'observacoes'];
+  const csv = [cols.join(';'), ...(data || []).map(r => cols.map(c => String(r[c] ?? '').replace(/;/g, ',')).join(';'))].join('
+');
+  const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv); a.download = `saidas_${iniVal}_${fimVal}.csv`; a.click();
 };
 
 // ============================================================
@@ -983,6 +1138,7 @@ async function iniciarApp(){
     {sec:'Relatórios'},
     {p:'entradas',l:'Entradas',show:isG||isSec||isCont},
     {p:'saidas_sec',l:'Minhas Saídas',show:isSec},
+    {p:'saidas_relatorio',l:'Saídas',show:isG},
     {p:'fluxo',l:'Fluxo de Caixa',show:isG},
     {p:'relatorios',l:'Por Profissional',show:isG},
     {p:'metas',l:'Metas',show:isG},
