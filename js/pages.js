@@ -1,3 +1,17 @@
+
+window.toggleFiltrosAvancados = function() {
+  const div = document.getElementById('filtros-avancados');
+  const btn = document.getElementById('btn-filtros-av');
+  if (!div) return;
+  const open = div.style.display === 'none';
+  div.style.display = open ? 'block' : 'none';
+  if (btn) btn.textContent = open ? '− Filtros' : '+ Filtros';
+};
+
+window.limparFiltrosForma = function() {
+  document.querySelectorAll('#fil-formas-wrap input').forEach(cb => cb.checked = false);
+};
+
 // ============================================================
 // NAVEGAÇÃO — ÚNICA, CORRETA
 // ============================================================
@@ -324,11 +338,24 @@ async function pgEntradas(){
       <button class="btn btn-secondary btn-sm no-print" onclick="window.print()">🖨 Imprimir</button>
     </div></div>
     <div class="filter-bar">
-      <input type="month" id="fil-mes" value="${mesAtual()}" style="width:155px">
-      <input id="fil-busca" placeholder="Buscar paciente ou procedimento..." style="flex:1;min-width:180px">
-      <select id="fil-prof" style="width:150px"><option value="">Todos profissionais</option>${APP.profs.map(p=>`<option>${p.nome}</option>`).join('')}</select>
-      <select id="fil-forma" style="width:140px"><option value="">Todas as formas</option>${['Pix','Dinheiro','Débito','Crédito 1x','Crédito 2x','Crédito 3x','Crédito 4x','Crédito 5x','Crédito 6x','Crédito 7x','Crédito 8x','Crédito 9x','Crédito 10x','Crédito 11x','Crédito 12x'].map(f=>`<option>${f}</option>`).join('')}</select>
+      <input type="month" id="fil-mes" value="${mesAtual()}" style="width:145px">
+      <input id="fil-busca" placeholder="Buscar paciente..." style="width:180px">
+      <select id="fil-prof" style="width:145px"><option value="">Todos profissionais</option>${APP.profs.map(p=>`<option>${p.nome}</option>`).join('')}</select>
+      <select id="fil-efet" style="width:145px"><option value="">Quem efetuou</option>${[...APP.profs.map(p=>p.nome),...APP.usuarios.filter(u=>u.perfil==='secretaria').map(u=>u.nome)].map(n=>`<option>${n}</option>`).join('')}</select>
+      <button class="btn btn-primary btn-sm" onclick="toggleFiltrosAvancados()" id="btn-filtros-av" style="background:var(--gray1);color:var(--text);border:1.5px solid var(--gray2)">+ Filtros</button>
       <button class="btn btn-primary btn-sm" onclick="carregarEntradas()">Filtrar</button>
+    </div>
+    <div id="filtros-avancados" style="display:none;background:var(--gray1);border-radius:var(--rsm);padding:12px;margin-bottom:12px;border:1.5px solid var(--gray2)">
+      <div style="font-size:11px;font-weight:700;color:var(--gray4);text-transform:uppercase;margin-bottom:8px">Filtrar por forma de pagamento (selecione uma ou mais)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px" id="fil-formas-wrap">
+        ${['Pix','Dinheiro','Débito','Crédito 1x','Crédito 2x','Crédito 3x','Crédito 4x','Crédito 5x','Crédito 6x','Crédito 7x','Crédito 8x','Crédito 9x','Crédito 10x','Crédito 11x','Crédito 12x'].map(f=>`
+          <label style="display:flex;align-items:center;gap:5px;background:var(--white);border:1.5px solid var(--gray2);border-radius:20px;padding:4px 10px;cursor:pointer;font-size:12px;font-weight:500;user-select:none">
+            <input type="checkbox" value="${f}" style="width:auto;accent-color:var(--primary)"> ${f}
+          </label>`).join('')}
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="limparFiltrosForma()">Limpar seleção</button>
+      </div>
     </div>
     <div class="metrics-grid" id="ent-totais" style="grid-template-columns:repeat(${isGestora?3:1},1fr);margin-bottom:14px"></div>
     <div class="card" style="padding:0" id="ent-tabela"><div style="text-align:center;padding:40px"><span class="spinner dark"></span></div></div>`;
@@ -340,11 +367,15 @@ window.carregarEntradas=async function(){
   const mes=document.getElementById('fil-mes')?.value||mesAtual();
   const busca=(document.getElementById('fil-busca')?.value||'').toLowerCase();
   const prof=document.getElementById('fil-prof')?.value||'';
-  const forma=document.getElementById('fil-forma')?.value||'';
+  const efet=document.getElementById('fil-efet')?.value||'';
   const isGestora=APP.user.perfil==='gestora';
+  // Coletar formas marcadas (multi-select)
+  const formasSel=[...document.querySelectorAll('#fil-formas-wrap input:checked')].map(cb=>cb.value);
   let q=sb.from('entradas').select('*').gte('data_venda',inicioMes(mes)).lte('data_venda',fimMes(mes)).order('data_venda',{ascending:false});
   if(prof)q=q.eq('profissional_nome',prof);
-  if(forma)q=q.eq('forma',forma);
+  if(efet)q=q.eq('efetuou_venda',efet);
+  if(formasSel.length===1)q=q.eq('forma',formasSel[0]);
+  else if(formasSel.length>1)q=q.in('forma',formasSel);
   const {data,error}=await q;
   if(error){toast('Erro: '+error.message,'error');return;}
   let rows=data||[];
@@ -678,8 +709,55 @@ async function pgRecebiveis(){
   const rows=data||[], porMes={};
   rows.forEach(r=>{const m=r.data_venc?.slice(0,7);if(!porMes[m]){porMes[m]={total:0,rows:[]};}porMes[m].total+=Number(r.valor);porMes[m].rows.push(r);});
   const totG=rows.reduce((s,r)=>s+Number(r.valor),0);
-  document.getElementById('recv-ct').innerHTML=`<div class="metrics-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:18px"><div class="metric-card"><div class="metric-label">Total a receber</div><div class="metric-value">${fmt(totG)}</div><div class="metric-sub">${rows.length} parcelas</div></div><div class="metric-card info"><div class="metric-label">Meses projetados</div><div class="metric-value">${Object.keys(porMes).length}</div></div></div>${Object.entries(porMes).map(([mes,d])=>`<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>${mesLabel(mes+'-01')}</h3><span style="font-weight:700;color:var(--primary);font-size:15px">${fmt(d.total)}</span></div><div class="table-wrapper"><table><thead><tr><th>Paciente</th><th>Profissional</th><th>Forma</th><th style="text-align:right">Vencimento</th><th style="text-align:right">Valor</th><th style="text-align:right">Parcela</th></tr></thead><tbody>${d.rows.map(p=>`<tr><td style="font-weight:500">${p.entradas?.paciente||'-'}</td><td>${p.entradas?.profissional_nome||'-'}</td><td><span class="badge badge-blue">${p.entradas?.forma||'-'}</span></td><td style="text-align:right">${fmtData(p.data_venc)}</td><td style="text-align:right;font-weight:700;color:var(--primary)">${fmt(p.valor)}</td><td style="text-align:right"><span class="badge badge-green">${p.numero}/${p.total}</span></td></tr>`).join('')}</tbody></table></div></div>`).join('')}${!Object.keys(porMes).length?'<div class="empty-state"><p>Nenhum recebível futuro</p></div>':''}`;
+  const meses=Object.entries(porMes);
+  document.getElementById('recv-ct').innerHTML=
+    `<div class="metrics-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:18px">
+      <div class="metric-card"><div class="metric-label">Total a receber</div><div class="metric-value">${fmt(totG)}</div><div class="metric-sub">${rows.length} parcelas em ${meses.length} meses</div></div>
+      <div class="metric-card info"><div class="metric-label">Próximo vencimento</div><div class="metric-value">${rows.length?mesLabel(rows[0].data_venc?.slice(0,7)+'-01'):'-'}</div></div>
+    </div>` +
+    meses.map(([mes,d],idx)=>{
+      const aberto = idx===0; // primeiro mês começa aberto
+      return `<div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
+        <div onclick="toggleRecebivelMes('recv-mes-${mes.replace('-','')}')" style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;cursor:pointer;user-select:none;background:${aberto?'var(--primary-light)':'var(--white)'}">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span id="recv-ico-${mes.replace('-','')}" style="font-size:16px;transition:transform .2s">${aberto?'▼':'▶'}</span>
+            <div>
+              <div style="font-weight:700;font-size:15px">${mesLabel(mes+'-01')}</div>
+              <div style="font-size:12px;color:var(--gray3)">${d.rows.length} parcela${d.rows.length>1?'s':''}</div>
+            </div>
+          </div>
+          <span style="font-weight:800;color:var(--primary);font-size:16px">${fmt(d.total)}</span>
+        </div>
+        <div id="recv-mes-${mes.replace('-','')}" style="display:${aberto?'block':'none'}">
+          <div class="table-wrapper"><table>
+            <thead><tr><th>Paciente</th><th>Profissional</th><th>Forma</th><th style="text-align:right">Vencimento</th><th style="text-align:right">Valor</th><th style="text-align:right">Parcela</th></tr></thead>
+            <tbody>${d.rows.map(p=>`<tr>
+              <td style="font-weight:500">${p.entradas?.paciente||'-'}</td>
+              <td>${p.entradas?.profissional_nome||'-'}</td>
+              <td><span class="badge badge-blue">${p.entradas?.forma||'-'}</span></td>
+              <td style="text-align:right">${fmtData(p.data_venc)}</td>
+              <td style="text-align:right;font-weight:700;color:var(--primary)">${fmt(p.valor)}</td>
+              <td style="text-align:right"><span class="badge badge-green">${p.numero}/${p.total}</span></td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </div>
+      </div>`;
+    }).join('') +
+    (!meses.length?'<div class="empty-state"><p>Nenhum recebível futuro</p></div>':'');
 }
+
+window.toggleRecebivelMes = function(id) {
+  const div = document.getElementById(id);
+  const key = id.replace('recv-mes-','');
+  const ico = document.getElementById('recv-ico-'+key);
+  if (!div) return;
+  const open = div.style.display === 'none';
+  div.style.display = open ? 'block' : 'none';
+  if (ico) ico.textContent = open ? '▼' : '▶';
+  // Mudar cor do header
+  const header = div.previousElementSibling;
+  if (header) header.style.background = open ? 'var(--primary-light)' : 'var(--white)';
+};
 
 // ============================================================
 // METAS MENSAIS
