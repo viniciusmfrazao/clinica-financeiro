@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Redefinir Senha</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="css/style.css"/>
+<style>
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--primary-dark) 0%,var(--primary) 100%);padding:20px}
+</style>
+</head>
+<body>
+<div class="login-card">
+  <div class="login-logo">
+    <div class="login-logo-circle">
+      <svg width="26" height="26" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    </div>
+    <div class="login-title" id="page-title">Nova senha</div>
+    <div class="login-sub" id="page-sub">Digite sua nova senha de acesso</div>
+  </div>
+  <div id="form-area">
+    <div class="form-grid">
+      <div class="form-group"><label>Nova senha</label><input type="password" id="np-senha" placeholder="Mínimo 6 caracteres"/></div>
+      <div class="form-group"><label>Confirmar senha</label><input type="password" id="np-confirma" placeholder="Repita a senha"/></div>
+    </div>
+    <p id="np-msg" style="font-size:13px;margin-bottom:10px;display:none"></p>
+    <button onclick="salvarNovaSenha()" class="btn btn-primary btn-full" id="btn-salvar">Salvar nova senha</button>
+  </div>
+</div>
+
+<script>
+const SB_URL  = 'https://avdqqbaeormqcvikpawn.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2ZHFxYmFlb3JtcWN2aWtwYXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNzM1OTEsImV4cCI6MjA5MDY0OTU5MX0.EQHJI-ByJ8CRq1y_-GKDykj4vZe3UsngxYV25m3Mm3Y';
+const sb = supabase.createClient(SB_URL, SB_ANON);
+
+// O Supabase envia o token no hash: #access_token=...&type=recovery
+// Esta página aguarda o evento PASSWORD_RECOVERY para confirmar
+(async function init() {
+  // Deixar o Supabase processar o hash automaticamente
+  const { data: { session } } = await sb.auth.getSession();
+
+  if (!session) {
+    // Aguardar o evento de auth state change
+    sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        // Sessão válida — mostrar formulário (já está visível por padrão)
+        document.getElementById('page-sub').textContent = 'Sessão verificada. Digite sua nova senha.';
+      }
+    });
+    // Verificar se há hash na URL
+    if (!window.location.hash.includes('access_token')) {
+      document.getElementById('page-title').textContent = 'Link inválido';
+      document.getElementById('page-sub').textContent = 'Este link expirou ou já foi usado.';
+      document.getElementById('form-area').innerHTML = '<a href="/index.html" class="btn btn-primary btn-full">Voltar ao login</a>';
+    }
+    return;
+  }
+
+  // Se já tem sessão de recovery, tudo certo
+})();
+
+async function salvarNovaSenha() {
+  const senha    = document.getElementById('np-senha')?.value;
+  const confirma = document.getElementById('np-confirma')?.value;
+  const msg      = document.getElementById('np-msg');
+  const btn      = document.getElementById('btn-salvar');
+
+  if (!senha || senha.length < 6) {
+    msg.textContent = 'A senha deve ter mínimo 6 caracteres.';
+    msg.style.color = 'var(--danger)'; msg.style.display = 'block'; return;
+  }
+  if (senha !== confirma) {
+    msg.textContent = 'As senhas não coincidem.';
+    msg.style.color = 'var(--danger)'; msg.style.display = 'block'; return;
+  }
+
+  btn.textContent = 'Salvando...'; btn.disabled = true;
+  const { error } = await sb.auth.updateUser({ password: senha });
+  btn.textContent = 'Salvar nova senha'; btn.disabled = false;
+
+  if (error) {
+    msg.textContent = 'Erro: ' + error.message;
+    msg.style.color = 'var(--danger)'; msg.style.display = 'block';
+  } else {
+    msg.textContent = '✓ Senha redefinida com sucesso! Redirecionando...';
+    msg.style.color = 'var(--primary)'; msg.style.display = 'block';
+    await sb.auth.signOut();
+    setTimeout(() => { window.location.href = '/index.html'; }, 2000);
+  }
+}
+</script>
+</body>
+</html>

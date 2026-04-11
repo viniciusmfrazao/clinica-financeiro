@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Clínica Financeiro</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+
+<div id="toast-ct"></div>
+
+<!-- LOGIN -->
+<div id="login-screen" style="display:none">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-circle">
+        <svg width="26" height="26" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <div class="login-title" id="login-nome">Clínica Financeiro</div>
+      <div class="login-sub">Sistema de gestão financeira</div>
+    </div>
+    <form id="form-login">
+      <div class="form-grid">
+        <div class="form-group"><label>E-mail</label><input type="email" id="l-email" required autocomplete="email" autofocus/></div>
+        <div class="form-group"><label>Senha</label><input type="password" id="l-senha" required/></div>
+      </div>
+      <p id="l-erro" style="color:var(--danger);font-size:13px;margin-bottom:10px;display:none"></p>
+      <button type="submit" class="btn btn-primary btn-full" id="btn-login">Entrar</button>
+      <div style="text-align:center;margin-top:14px">
+        <button type="button" onclick="mostrarEsqueciSenha()" style="background:none;border:none;color:var(--primary);font-size:13px;cursor:pointer;text-decoration:underline">Esqueci minha senha</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ESQUECI SENHA -->
+<div id="forgot-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--primary-dark) 0%,var(--primary) 100%);padding:20px">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-circle">
+        <svg width="26" height="26" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <div class="login-title">Redefinir senha</div>
+      <div class="login-sub">Enviaremos um link para seu e-mail</div>
+    </div>
+    <div id="forgot-form-ct">
+      <div class="form-grid">
+        <div class="form-group"><label>E-mail cadastrado</label><input type="email" id="f-email" autocomplete="email"/></div>
+      </div>
+      <p id="f-msg" style="font-size:13px;margin-bottom:10px;display:none"></p>
+      <button onclick="enviarResetSenha()" class="btn btn-primary btn-full" id="btn-reset">Enviar link de redefinição</button>
+      <div style="text-align:center;margin-top:14px">
+        <button onclick="mostrarLogin()" style="background:none;border:none;color:var(--primary);font-size:13px;cursor:pointer;text-decoration:underline">Voltar ao login</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NOVA SENHA (após clicar no link do email) -->
+<div id="newpass-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--primary-dark) 0%,var(--primary) 100%);padding:20px">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-circle">
+        <svg width="26" height="26" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <div class="login-title">Nova senha</div>
+      <div class="login-sub">Digite sua nova senha de acesso</div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>Nova senha</label><input type="password" id="np-senha" placeholder="Mínimo 6 caracteres"/></div>
+      <div class="form-group"><label>Confirmar senha</label><input type="password" id="np-confirma" placeholder="Repita a senha"/></div>
+    </div>
+    <p id="np-msg" style="font-size:13px;margin-bottom:10px;display:none"></p>
+    <button onclick="salvarNovaSenha()" class="btn btn-primary btn-full" id="btn-nova-senha">Salvar nova senha</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none">
+  <div id="sidebar-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:199" onclick="toggleSidebar()"></div>
+  <aside id="sidebar">
+    <div class="logo-area">
+      <div class="logo-circle" id="logo-char">C</div>
+      <div><div class="logo-text" id="sys-nome">Clínica Financeiro</div><div class="logo-sub">Gestão financeira</div></div>
+    </div>
+    <nav id="sidebar-nav"></nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar" id="u-avatar">?</div>
+        <div><div class="user-name" id="u-nome">—</div><div class="user-role" id="u-perfil">—</div></div>
+      </div>
+      <button class="btn-logout" onclick="logout()">↩ Sair do sistema</button>
+    </div>
+  </aside>
+  <div id="main">
+    <header id="topbar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button onclick="toggleSidebar()" style="background:none;border:none;cursor:pointer;padding:5px;display:none" id="menu-btn">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <span id="topbar-title" class="page-title">Dashboard</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="topbar-data" style="font-size:12px;color:var(--gray3)"></span>
+        <div style="position:relative">
+          <button onclick="toggleNotif()" style="background:none;border:none;cursor:pointer;padding:5px;color:var(--gray4);position:relative">
+            <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span id="notif-badge" style="position:absolute;top:2px;right:2px;width:15px;height:15px;background:var(--danger);color:#fff;border-radius:50%;font-size:9px;font-weight:700;display:none;align-items:center;justify-content:center"></span>
+          </button>
+          <div id="notif-panel" style="display:none;position:absolute;right:0;top:calc(100% + 6px);width:320px;background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow-md);border:.5px solid var(--gray2);z-index:300;max-height:360px;overflow-y:auto">
+            <div style="padding:10px 14px;border-bottom:1px solid var(--gray2);display:flex;justify-content:space-between;align-items:center">
+              <span style="font-weight:600;font-size:13px">Notificações</span>
+              <button onclick="marcarTodasLidas()" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--primary)">Marcar todas lidas</button>
+            </div>
+            <div id="notif-lista"></div>
+          </div>
+        </div>
+      </div>
+    </header>
+    <main id="content"><div style="text-align:center;padding:60px"><span class="spinner dark"></span></div></main>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/pages.js?v=1775346022"></script>
+</body>
+</html>
